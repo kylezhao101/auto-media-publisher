@@ -66,13 +66,13 @@ def add_assets(job_id: str, req: AddAssetsRequest):
                 kind=a.kind,
                 url=storage_service.generate_upload_url(job_id, a.kind, a.filename, a.content_type),
                 method="PUT",
-                headers={"Content-Type": a.content_type or "application/octet-stream"},
-            )
+                headers={"Content-Type": a.content_type or "application/octet-stream", "x-ms-blob-type": "BlockBlob"},
+            )   
         )
 
     job_repository.save_job(job_id, job)
     
-    return AddAssetsResponse(job_id=job_id, upload=upload_instructions)
+    return AddAssetsResponse(job_id=job_id, uploads=upload_instructions)
 
 
 @router.post("/{job_id}/complete", response_model=CompleteJobResponse)

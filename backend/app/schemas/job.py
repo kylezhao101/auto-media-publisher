@@ -40,7 +40,7 @@ class UploadInstruction(BaseModel):
 
 class AddAssetsResponse(BaseModel):
     job_id: str
-    upload: List[UploadInstruction]
+    uploads: List[UploadInstruction]
 
 
 class CompleteJobResponse(BaseModel):
