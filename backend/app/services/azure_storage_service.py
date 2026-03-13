@@ -28,7 +28,7 @@ class BlobPath:
     container: str
     blob: str
 
-class StorageService:
+class AzureStorageService:
     def __init__(self) -> None:
         if not AZURE_STORAGE_ACCOUNT_NAME or not AZURE_STORAGE_ACCOUNT_KEY:
             raise RuntimeError("Azure storage account name and key must be set in environment variables")

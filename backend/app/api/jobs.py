@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import uuid
 from fastapi import APIRouter, HTTPException, Request
 from pathlib import Path
@@ -13,13 +12,17 @@ from app.schemas.job import (
     UploadInstruction,
 )
 from app.store.memory import JOBS, Job
-from app.store.local_queue import enqueue
-from app.services.azure_storage import StorageService
+from app.services.azure_storage_service import AzureStorageService
+from app.services.azure_queue_service import AzureQueueService
 from app.services.job_repository import JobRepository
 
 router = APIRouter()
-storage_service = StorageService()
+storage_service = AzureStorageService()
 job_repository = JobRepository()
+queue_service = AzureQueueService()
+
+if queue_service.is_available:
+    queue_service.ensure_queue_exists()
 
 # TODO: protect endpoint with auth
 @router.post("", response_model=CreateJobResponse)
@@ -108,7 +111,12 @@ def complete_job(job_id: str):
     job_repository.update_status(job_id, "queued")
     job = job_repository.get_job(job_id)
 
-    enqueue(queue_message)
+    if queue_service.is_available:
+        queue_service.enqueue_message_as_json(queue_message)
+    else:
+        raise HTTPException(status_code=503, detail="Azure queue service is not available, cannot process job at this time")
+
+    
     return CompleteJobResponse(job_id=job_id, status=job["status"], queue_message=queue_message)
 
 

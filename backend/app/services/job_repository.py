@@ -1,10 +1,10 @@
 from typing import Optional
 
-from app.services.azure_storage import StorageService
+from app.services.azure_storage_service import AzureStorageService
 
 class JobRepository:
     def __init__(self) -> None:
-        self.storage_service = StorageService()
+        self.storage_service = AzureStorageService()
     
     def create_job(self, job_id: str, metadata: dict) -> None:
         self.storage_service.upload_job_metadata(job_id, metadata)
