@@ -8,7 +8,7 @@ import { pushApiLog } from "@/lib/apiLogStore";
 import type {
   AddAssetsRequest,
   AddAssetsResponse,
-  CompleteJobResponse,
+  SubmitJobResponse,
   CreateJobRequest,
   CreateJobResponse,
   JobStatusResponse,
@@ -86,9 +86,9 @@ export async function addAssets(
   return res.data;
 }
 
-export async function completeJob(jobId: string): Promise<CompleteJobResponse> {
-  const res = await api.post<CompleteJobResponse>(`/jobs/${jobId}/complete`, undefined, {
-    meta: { label: "Complete Job" },
+export async function submitJob(jobId: string): Promise<SubmitJobResponse> {
+  const res = await api.post<SubmitJobResponse>(`/jobs/${jobId}/submit`, undefined, {
+    meta: { label: "Submit Job" },
   });
   return res.data;
 }

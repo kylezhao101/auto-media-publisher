@@ -36,7 +36,7 @@ export interface AddAssetsResponse {
     uploads: UploadInstruction[];
 }
 
-export interface CompleteJobResponse {
+export interface SubmitJobResponse {
     job_id: string;
     status: string;
     queue_message: {
