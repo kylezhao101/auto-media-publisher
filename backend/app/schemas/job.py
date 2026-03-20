@@ -29,6 +29,8 @@ class CreateJobResponse(BaseModel):
 class AddAssetsRequest(BaseModel):
     assets: List[UploadAsset]
 
+class UpdateJobStatusRequest(BaseModel):
+    status: str
 
 class UploadInstruction(BaseModel):
     filename: str
@@ -43,11 +45,10 @@ class AddAssetsResponse(BaseModel):
     uploads: List[UploadInstruction]
 
 
-class CompleteJobResponse(BaseModel):
+class SubmitJobResponse(BaseModel):
     job_id: str
     status: str
     queue_message: dict 
-
 
 class JobStatusResponse(BaseModel):
     job_id: str

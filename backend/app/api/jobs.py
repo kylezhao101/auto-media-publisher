@@ -5,10 +5,11 @@ from pathlib import Path
 from app.schemas.job import (
     AddAssetsRequest,
     AddAssetsResponse,
-    CompleteJobResponse,
     CreateJobRequest,
     CreateJobResponse,
     JobStatusResponse,
+    SubmitJobResponse,
+    UpdateJobStatusRequest,
     UploadInstruction,
 )
 from app.store.memory import JOBS, Job
@@ -78,8 +79,8 @@ def add_assets(job_id: str, req: AddAssetsRequest):
     return AddAssetsResponse(job_id=job_id, uploads=upload_instructions)
 
 
-@router.post("/{job_id}/complete", response_model=CompleteJobResponse)
-def complete_job(job_id: str):
+@router.post("/{job_id}/submit", response_model=SubmitJobResponse)
+def submit_job(job_id: str):
     job = job_repository.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -109,7 +110,6 @@ def complete_job(job_id: str):
     }
 
     job_repository.update_status(job_id, "queued")
-    job = job_repository.get_job(job_id)
 
     if queue_service.is_available:
         queue_service.enqueue_message_as_json(queue_message)
@@ -117,8 +117,26 @@ def complete_job(job_id: str):
         raise HTTPException(status_code=503, detail="Azure queue service is not available, cannot process job at this time")
 
     
-    return CompleteJobResponse(job_id=job_id, status=job["status"], queue_message=queue_message)
+    return SubmitJobResponse(job_id=job_id, status=job["status"], queue_message=queue_message)
 
+@router.patch("/{job_id}/status", response_model=JobStatusResponse)
+def patch_job(job_id: str, req: UpdateJobStatusRequest):
+    job = job_repository.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    job_repository.update_status(job_id, req.status)
+    job = job_repository.get_job(job_id)
+    return JobStatusResponse(
+        job_id=job["job_id"],
+        status=job["status"],
+        title=job["title"],
+        description=job["description"],
+        assets=job["assets"],
+        youtube_url=job["youtube_url"],
+        error=job["error"],
+    )
+    
 
 @router.get("/{job_id}", response_model=JobStatusResponse)
 def get_job(job_id: str):

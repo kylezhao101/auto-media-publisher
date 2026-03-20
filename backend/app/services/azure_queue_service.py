@@ -3,20 +3,20 @@ from typing import Optional
 
 from azure.storage.queue import QueueClient
 
-from app.config import AZURE_QUEUE_CONNECTION_STRING, AZURE_QUEUE_NAME
+from app.config import AZURE_CONNECTION_STRING, AZURE_QUEUE_NAME
 
 class AzureQueueService:
     def __init__(self) -> None:
         self.client: Optional[QueueClient] = None
         self.configuration_error: Optional[str] = None
 
-        if not AZURE_QUEUE_CONNECTION_STRING:
-            self.configuration_error = "Azure queue connection string is not set"
+        if not AZURE_CONNECTION_STRING:
+            self.configuration_error = "Azure connection string is not set"
             return
 
         try:
             self.client = QueueClient.from_connection_string(
-                conn_str=AZURE_QUEUE_CONNECTION_STRING,
+                conn_str=AZURE_CONNECTION_STRING,
                 queue_name=AZURE_QUEUE_NAME,
             )
         except ValueError as exc:

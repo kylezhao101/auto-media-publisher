@@ -18,4 +18,5 @@ SAS_EXPIRY_MINUTES = int(os.getenv("SAS_EXPIRY_MINUTES", "60"))
 AZURE_BLOB_ENDPOINT = os.getenv("AZURE_BLOB_ENDPOINT", "").rstrip("/")
 
 AZURE_QUEUE_NAME = os.getenv("AZURE_QUEUE_NAME", "video_processing")
-AZURE_QUEUE_CONNECTION_STRING = os.getenv("AZURE_QUEUE_CONNECTION_STRING", "").strip()
+
+AZURE_CONNECTION_STRING = os.getenv("AZURE_CONNECTION_STRING", "").strip()
