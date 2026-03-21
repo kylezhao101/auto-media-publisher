@@ -24,6 +24,7 @@ AZURE_PROCESSED_CONTAINER = os.getenv("BLOB_CONTAINER_PROCESSED", "processed")
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 FFMPEG_PATH = os.getenv("FFMPEG_PATH", "ffmpeg")
 PUBLISHER_SERVICE_API_KEY = os.getenv("API_KEY", "")
+FFPROBE_PATH = os.getenv("FFPROBE_PATH", "ffprobe")
 
 blob_service_client = BlobServiceClient.from_connection_string(AZURE_CONNECTION_STRING)
 uploads_container_client = blob_service_client.get_container_client(AZURE_UPLOADS_CONTAINER)
@@ -86,7 +87,7 @@ def get_total_duration(clip_paths: list[Path]) -> float:
     total = 0.0
     for path in clip_paths:
         result = subprocess.run(
-            [FFMPEG_PATH.replace("ffmpeg", "ffprobe"), "-v", "error",
+            [FFPROBE_PATH, "-v", "error",
              "-show_entries", "format=duration",
              "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
             capture_output=True, text=True
