@@ -3,6 +3,7 @@ import { addAssets, submitJob, createJob, getJob } from "../lib/api"
 import { uploadFile } from "../lib/azure"
 import type { JobStatusResponse, UploadAsset } from "../types/job"
 import type { LocalClip, LocalThumbnail } from "../types/dashboard"
+import { useJobProgress } from "./useJobProgress"
 
 export function useJobWorkflow() {
   const [title, setTitle] = useState("")
@@ -22,6 +23,13 @@ export function useJobWorkflow() {
 
   const [autoSubmitAfterUpload, setAutoSubmitAfterUpload] = useState(false)
 
+  const progress = useJobProgress(jobId, status, async (newStatus) => {
+    setStatus(newStatus)
+    if (jobId) {
+      const job = await getJob(jobId)
+      setServerJob(job)
+    }
+  })
 
   function handleThumbnailChange(file: File) {
     setThumbnail((prev) => {
@@ -167,13 +175,13 @@ export function useJobWorkflow() {
       }
 
       if (autoSubmitAfterUpload) {
-        setStatus("uploaded")
-
         setIsSubmittingJob(true)
         const submitRes = await submitJob(jobId)
         setStatus(submitRes.status)
-      } else {
-        setStatus("uploaded")
+
+        const job = await getJob(jobId)
+        setServerJob(job)
+        setStatus(job.status)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to upload assets")
@@ -195,6 +203,10 @@ export function useJobWorkflow() {
 
       const res = await submitJob(jobId)
       setStatus(res.status)
+
+      const job = await getJob(jobId)
+      setServerJob(job)
+      setStatus(job.status)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit job")
     } finally {
@@ -249,5 +261,6 @@ export function useJobWorkflow() {
     handleSubmitJob,
     handleRefreshStatus,
     setAutoSubmitAfterUpload,
+    progress,
   }
 }

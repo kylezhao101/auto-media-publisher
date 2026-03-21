@@ -11,17 +11,25 @@ import {
 
 import JobDetailsCard from "@/components/JobDetailsCard"
 import ThumbnailCard from "@/components/ThumbnailCard"
-import { useJobWorkflow } from "./hooks/useJobWorkflow"
 import { useApiLogs } from "./hooks/useApiLog"
 import ClipsCard from "./components/ClipsCard"
 import ActionsCard from "./components/ActionsCard"
 import ReviewCard from "./components/reviewCard"
 import ServerStatusCard from "./components/ServerStatusCard"
+import { hasApiKey } from "@/lib/apiKeyStore"
+import { ApiKeyGate } from "@/components/ApiKeyGate"
+import { useState } from "react"
+import { useJobWorkflow } from "./hooks/useJobWorkflow"
 
 export function App() {
 
   const workflow = useJobWorkflow()
   const { logs: apiLogs, clearLogs } = useApiLogs()
+  const [authenticated, setAuthenticated] = useState(hasApiKey())
+
+  if (!authenticated) {
+    return <ApiKeyGate onAuthenticated={() => setAuthenticated(true)} />
+  }
 
   return (
     <main className="min-h-svh bg-background p-6 md:p-8">
@@ -94,7 +102,7 @@ export function App() {
               clips={workflow.clips}
             />
 
-            <ServerStatusCard serverJob={workflow.serverJob} />
+            <ServerStatusCard serverJob={workflow.serverJob} progress={workflow.progress} />
 
           </div>
 

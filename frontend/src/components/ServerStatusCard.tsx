@@ -1,11 +1,17 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Progress } from "@/components/ui/progress"
 import type { JobStatusResponse } from "@/types/job"
 
 type ServerStatusCardProps = {
     serverJob: JobStatusResponse | null
+    progress?: number
 }
 
-export default function ServerStatusCard({ serverJob }: ServerStatusCardProps) {
+const RENDERING_STATUSES = ["queued", "rendering"]
+
+export default function ServerStatusCard({ serverJob, progress = 0 }: ServerStatusCardProps) {
+    const isRendering = serverJob && RENDERING_STATUSES.includes(serverJob.status)
+
     return (
         <Card>
             <CardHeader>
@@ -22,6 +28,16 @@ export default function ServerStatusCard({ serverJob }: ServerStatusCardProps) {
                             <span className="text-muted-foreground">Status:</span>{" "}
                             <span>{serverJob.status}</span>
                         </div>
+
+                        {isRendering && (
+                            <div className="space-y-1">
+                                <div className="flex justify-between text-xs text-muted-foreground">
+                                    <span>Rendering</span>
+                                    <span>{progress}%</span>
+                                </div>
+                                <Progress value={progress} className="h-2" />
+                            </div>
+                        )}
 
                         <div>
                             <span className="text-muted-foreground">Assets:</span>{" "}
@@ -47,6 +63,6 @@ export default function ServerStatusCard({ serverJob }: ServerStatusCardProps) {
                     </>
                 )}
             </CardContent>
-        </Card>
+        </Card >
     )
 }

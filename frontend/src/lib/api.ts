@@ -14,6 +14,8 @@ import type {
   JobStatusResponse,
 } from "@/types/job";
 
+import { getApiKey } from "@/lib/apiKeyStore";
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
@@ -66,6 +68,15 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  const key = getApiKey();
+  if (key) {
+    config.headers["X-API-Key"] = key;
+  }
+  return config;
+});
+
 
 export async function createJob(
   payload: CreateJobRequest

@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { Loader2 } from "lucide-react"
 
 type ActionsCardProps = {
     jobId: string | null
@@ -55,6 +56,7 @@ export default function ActionsCard({
                 </div>
 
                 <Button onClick={onUploadAssets} disabled={isUploadDisabled}>
+                    {isUploadingAssets && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     {autoSubmitAfterUpload ? "Upload & Submit" : "Upload Assets"}
                 </Button>
 
