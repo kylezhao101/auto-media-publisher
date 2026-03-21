@@ -58,3 +58,6 @@ class JobStatusResponse(BaseModel):
     assets: List[UploadAsset]
     youtube_url: Optional[str] = None
     error: Optional[str] = None
+
+class UpdateJobProgressRequest(BaseModel):
+    progress: int

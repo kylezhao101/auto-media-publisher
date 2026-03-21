@@ -1,7 +1,12 @@
 from __future__ import annotations
+import asyncio
+import asyncio
+import json
 import uuid
 from fastapi import APIRouter, HTTPException, Request
 from pathlib import Path
+
+from fastapi.responses import StreamingResponse
 from app.schemas.job import (
     AddAssetsRequest,
     AddAssetsResponse,
@@ -9,6 +14,7 @@ from app.schemas.job import (
     CreateJobResponse,
     JobStatusResponse,
     SubmitJobResponse,
+    UpdateJobProgressRequest,
     UpdateJobStatusRequest,
     UploadInstruction,
 )
@@ -16,6 +22,7 @@ from app.store.memory import JOBS, Job
 from app.services.azure_storage_service import AzureStorageService
 from app.services.azure_queue_service import AzureQueueService
 from app.services.job_repository import JobRepository
+from app.store.job_progress import set_progress, get_progress, clear_progress
 
 router = APIRouter()
 storage_service = AzureStorageService()
@@ -153,3 +160,27 @@ def get_job(job_id: str):
         youtube_url=job["youtube_url"],
         error=job["error"],
     )
+
+@router.patch("/{job_id}/progress")
+def update_progress(job_id: str, req: UpdateJobProgressRequest):
+    job = job_repository.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    set_progress(job_id, req.progress)
+    return {"ok": True}
+
+@router.get("/{job_id}/stream")
+async def stream_progress(job_id: str):
+    async def event_stream():
+        while True:
+            job = job_repository.get_job(job_id)
+            if not job:
+                break
+            progress = get_progress(job_id)
+            status = job.get("status", "unknown")
+            yield f"data: {json.dumps({'progress': progress, 'status': status})}\n\n"
+            if status in ("rendered", "failed"):
+                clear_progress(job_id)
+                break
+            await asyncio.sleep(1)
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
