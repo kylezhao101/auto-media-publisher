@@ -11,6 +11,12 @@ import traceback
 from azure.storage.queue import QueueClient
 from azure.storage.blob import BlobClient, BlobServiceClient, generate_blob_sas, BlobSasPermissions, ContentSettings
 
+import pickle
+from googleapiclient.discovery import build
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
+from googleapiclient.http import MediaFileUpload
+
 import subprocess
 import re
 
@@ -29,6 +35,77 @@ FFPROBE_PATH = os.getenv("FFPROBE_PATH", "ffprobe")
 blob_service_client = BlobServiceClient.from_connection_string(AZURE_CONNECTION_STRING)
 uploads_container_client = blob_service_client.get_container_client(AZURE_UPLOADS_CONTAINER)
 processed_container_client = blob_service_client.get_container_client(AZURE_PROCESSED_CONTAINER)
+GOOGLE_CREDENTIALS_PATH = os.getenv("GOOGLE_CREDENTIALS_PATH", "")
+GOOGLE_TOKEN_PATH = os.getenv("GOOGLE_TOKEN_PATH", "")
+
+YOUTUBE_SCOPES = ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly"]
+
+YOUTUBE_CHANNEL_ID = os.getenv("FCNABC_CHANNEL_ID", "")
+
+def get_youtube_client():
+    creds = None
+    if os.path.exists(GOOGLE_TOKEN_PATH):
+        with open(GOOGLE_TOKEN_PATH, "rb") as token_file:
+            creds = pickle.load(token_file)
+
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(GOOGLE_CREDENTIALS_PATH, YOUTUBE_SCOPES)
+            creds = flow.run_local_server(port=0)
+
+        with open(GOOGLE_TOKEN_PATH, "wb") as token_file:
+            pickle.dump(creds, token_file)
+
+    return build("youtube", "v3", credentials=creds)
+
+def upload_to_youtube(video_path: Path, title: str, description: str = "", job_id: str = "", thumbnail_path: Path | None = None) -> str:
+    youtube_client = get_youtube_client()
+
+    body = {
+        "snippet": {
+            "title": title,
+            "description": description,
+        },
+        "status": {
+            "privacyStatus": "private",
+            "selfDeclaredMadeForKids": False,
+        }
+    }
+
+    media = MediaFileUpload(str(video_path), mimetype="video/mp4", resumable=True, chunksize=5 * 1024 * 1024)
+    request = youtube_client.videos().insert(part="snippet,status", body=body, media_body=media)
+
+    response = None
+    while response is None:
+        status, response = request.next_chunk()
+        if status:
+            print(f"Upload progress for job {job_id}: {int(status.progress() * 100)}%")
+            if job_id:
+                api_patch(f"/jobs/{job_id}/progress", json={"progress": int(status.progress() * 100)})
+
+    video_id = response.get("id")
+    print(f"Upload complete for job {job_id}. Video ID: {video_id}")
+
+    if thumbnail_path and video_id:
+        suffix = thumbnail_path.suffix.lower()
+        mime_types = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"}
+        mime_type = mime_types.get(suffix, "image/jpeg")
+
+        try:
+            youtube_client.thumbnails().set(
+                videoId=video_id,
+                media_body=MediaFileUpload(str(thumbnail_path), mimetype=mime_type)
+            ).execute()
+            print(f"Thumbnail uploaded for job {job_id}.")
+        except Exception as e:
+            print(f"Failed to upload thumbnail for job {job_id}: {e}")
+    else:
+        print(f"Skipping thumbnail — path: {thumbnail_path}, video_id: {video_id}")
+
+    return video_id
+
 
 def api_header():
     return {"X-API-Key": PUBLISHER_SERVICE_API_KEY}
@@ -182,6 +259,14 @@ def process_job(job_id: str, job_data: dict) -> Path:
 
     if not clips_data:
         raise ValueError("No clips found in job data")
+    
+    persisted_out_path = Path.cwd() / f"{job_id}_output_persisted.mp4"
+    persisted_thumbnail_path = next(Path.cwd().glob(f"{job_id}_thumbnail.*"), None)
+
+    if persisted_out_path.exists():
+        print(f"Rendered output already exists for job {job_id}, skipping render.")
+        return persisted_out_path, persisted_thumbnail_path
+
     with tempfile.TemporaryDirectory(prefix=f"job_{job_id}_") as temp_dir:
         work_dir_path = Path(temp_dir)
         clip_paths = download_ordered_clips(job_id, job_data, work_dir_path, uploads_container_client)
@@ -211,7 +296,13 @@ def process_job(job_id: str, job_data: dict) -> Path:
         persisted_out_path = Path.cwd() / f"{job_id}_output_persisted.mp4"
         persisted_out_path.write_bytes(out_path.read_bytes())
 
-        return persisted_out_path
+        persisted_thumbnail_path = None
+        if thumbnail_path:
+            suffix = thumbnail_path.suffix
+            persisted_thumbnail_path = Path.cwd() / f"{job_id}_thumbnail{suffix}"
+            persisted_thumbnail_path.write_bytes(thumbnail_path.read_bytes())
+
+        return persisted_out_path, persisted_thumbnail_path
 
 
 def main_once():
@@ -247,7 +338,7 @@ def main_once():
         print(f"Processing job {job_id}: {job_data}")
 
         try:
-            output_path = process_job(job_id, job_data)
+            output_path, thumbnail_path = process_job(job_id, job_data)
             upload_blob_from_file(
                 processed_container_client,
                 f"{date.today().isoformat()}_{job_id}_{output_path.name}",
@@ -258,6 +349,14 @@ def main_once():
             api_patch(f"/jobs/{job_id}/status", json={"status": "rendered"})
 
             print(f"Job {job_id} processed successfully. Output saved to {output_path}")
+
+            job_title = job_data.get("title", f"Video {job_id}")
+            job_description = job_data.get("description", "")
+
+            youtube_video_id = upload_to_youtube(output_path, job_title, job_description, job_id, thumbnail_path)
+
+            api_patch(f"/jobs/{job_id}", json={"youtube_video_id": youtube_video_id, "status": "Published"})
+
 
             # only delete if processing succeeds
             queue.delete_message(message)
