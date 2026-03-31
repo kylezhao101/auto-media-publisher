@@ -29,10 +29,6 @@ storage_service = AzureStorageService()
 job_repository = JobRepository()
 queue_service = AzureQueueService()
 
-if queue_service.is_available:
-    queue_service.ensure_queue_exists()
-
-# TODO: protect endpoint with auth
 @router.post("", response_model=CreateJobResponse)
 def create_job(req: CreateJobRequest):
     job_id = str(uuid.uuid4())
@@ -53,7 +49,6 @@ def create_job(req: CreateJobRequest):
 
     return CreateJobResponse(job_id=job_id, status=job_repository.get_job(job_id)["status"])
 
-# TODO: protect endpoint with auth
 @router.post("/{job_id}/assets", response_model=AddAssetsResponse)
 def add_assets(job_id: str, req: AddAssetsRequest):
     job = job_repository.get_job(job_id)

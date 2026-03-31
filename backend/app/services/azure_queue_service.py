@@ -2,6 +2,7 @@ import json
 from typing import Optional
 
 from azure.storage.queue import QueueClient
+from azure.core.exceptions import ResourceExistsError
 
 from app.config import AZURE_CONNECTION_STRING, AZURE_QUEUE_NAME
 
@@ -24,7 +25,6 @@ class AzureQueueService:
 
     @property
     def is_available(self) -> bool:
-        print(self.client)
         return self.client is not None
 
     def ensure_queue_exists(self) -> None:
@@ -32,8 +32,9 @@ class AzureQueueService:
             return
         try:
             self.client.create_queue()
-        except Exception as e:
-            print(f"Error creating queue: {e}")
+            print(f"Queue '{AZURE_QUEUE_NAME}' created")
+        except ResourceExistsError:
+            print(f"Queue '{AZURE_QUEUE_NAME}' already exists")
         
     def enqueue_message_as_json(self, message: dict) -> None:
         if not self.client:
@@ -41,4 +42,4 @@ class AzureQueueService:
         try:
             self.client.send_message(json.dumps(message))
         except Exception as e:
-            print(f"Error enqueuing message: {e}")
+            raise RuntimeError(f"Failed to enqueue message: {e}")

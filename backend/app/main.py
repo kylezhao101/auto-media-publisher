@@ -1,9 +1,18 @@
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI
 from app.api import jobs
 from app.auth import verify_api_key
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="AutoMediaPublisher API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if jobs.queue_service.is_available:
+        jobs.queue_service.ensure_queue_exists()
+    yield
+
+
+app = FastAPI(title="AutoMediaPublisher API", lifespan=lifespan)
 
 origins = [
     "http://localhost:5173",
