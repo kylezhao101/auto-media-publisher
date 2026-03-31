@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { setApiKey } from "@/lib/apiKeyStore"
+import { setApiKey } from "@/store/apiKeyStore"
 import { getJob } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"

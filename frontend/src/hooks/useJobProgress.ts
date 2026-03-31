@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react"
-import { getApiKey } from "@/lib/apiKeyStore"
+import { getApiKey } from "@/store/apiKeyStore"
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000"
-const ACTIVE_STATUSES = ["queued", "rendering"]
+const ACTIVE_STATUSES = ["queued", "rendering", "rendered"]
 
 export function useJobProgress(
   jobId: string | null,
@@ -24,7 +24,7 @@ export function useJobProgress(
       if (data.status !== status) {
         onStatusChange?.(data.status)
       }
-      if (data.status === "rendered" || data.status === "failed") {
+      if (data.status === "published" || data.status === "failed") {
         es.close()
       }
     }

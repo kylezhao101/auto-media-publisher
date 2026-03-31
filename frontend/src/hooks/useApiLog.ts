@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { getApiLogs, subscribeApiLogs, clearApiLogs } from "@/lib/apiLogStore"
+import { getApiLogs, subscribeApiLogs, clearApiLogs } from "@/store/apiLogStore"
 import type { ApiLogEntry } from "@/types/log"
 
 export function useApiLogs() {

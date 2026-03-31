@@ -1,5 +1,5 @@
 import axios, { AxiosError } from "axios"
-import { pushApiLog } from "@/lib/apiLogStore"
+import { pushApiLog } from "@/store/apiLogStore"
 
 export const uploadClient = axios.create()
 

@@ -3,7 +3,7 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from "axios";
 
-import { pushApiLog } from "@/lib/apiLogStore";
+import { pushApiLog } from "@/store/apiLogStore";
 import type {
   AddAssetsRequest,
   AddAssetsResponse,
@@ -13,7 +13,7 @@ import type {
   JobStatusResponse,
 } from "@/types/job";
 
-import { getApiKey } from "@/lib/apiKeyStore";
+import { getApiKey } from "@/store/apiKeyStore";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
