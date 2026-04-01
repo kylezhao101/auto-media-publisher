@@ -83,3 +83,21 @@ class AzureStorageService:
     def generate_upload_url(self, job_id: str, asset_kind: AssetKind, filename: str, content_type: Optional[str] = None) -> str:
         path = self.uploads_path(job_id, asset_kind, filename)
         return self.sas_put_url(path, content_type)
+    
+    def download_all_job_metadata(self) -> list[dict]:
+        jobs: list[dict] = []
+
+        container_client = self.client.get_container_client(BLOB_CONTAINER_JOBS)
+        blobs = container_client.list_blobs()
+
+        for blob in blobs:
+            if not blob.name.endswith("job.json"):
+                continue
+            blob_client = container_client.get_blob_client(blob.name)
+            try:
+                data = blob_client.download_blob().readall()
+                jobs.append(json.loads(data))
+            except Exception as e:
+                print(f"Error downloading blob {blob.name}: {e}")
+
+        return jobs

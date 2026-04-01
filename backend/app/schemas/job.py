@@ -31,6 +31,7 @@ class AddAssetsRequest(BaseModel):
 
 class UpdateJobStatusRequest(BaseModel):
     status: str
+    youtube_video_id: Optional[str] = None
 
 class UploadInstruction(BaseModel):
     filename: str
@@ -50,14 +51,22 @@ class SubmitJobResponse(BaseModel):
     status: str
     queue_message: dict 
 
+class JobProgress(BaseModel):
+    rendering_progress: int = 0
+    publishing_progress: int = 0
+
 class JobStatusResponse(BaseModel):
     job_id: str
+    created_at: Optional[str] = None
     status: str
     title: str
     description: str
     assets: List[UploadAsset]
-    youtube_url: Optional[str] = None
+    youtube_video_id: Optional[str] = None
     error: Optional[str] = None
+    progress: Optional[JobProgress] = None
+
 
 class UpdateJobProgressRequest(BaseModel):
-    progress: int
+    rendering_progress: Optional[int] = None
+    publishing_progress : Optional[int] = None

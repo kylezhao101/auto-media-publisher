@@ -17,6 +17,7 @@ app = FastAPI(title="AutoMediaPublisher API", lifespan=lifespan)
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "https://auto-media-publisher.vercel.app"
 ]
 
 app.add_middleware(
@@ -30,5 +31,9 @@ app.add_middleware(
 @app.get("/")
 def health_check():
     return {"status": "ok"}
+
+@app.post("/validate-api-key")
+def validate_api_key(dependency=Depends(verify_api_key)):
+    return {"ok": True}
 
 app.include_router(jobs.router, prefix="/jobs", tags=["Jobs"], dependencies=[Depends(verify_api_key)])

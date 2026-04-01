@@ -1,10 +1,10 @@
 from __future__ import annotations
 import asyncio
 import asyncio
+from datetime import datetime, timezone
 import json
 import uuid
 from fastapi import APIRouter, HTTPException, Request
-from pathlib import Path
 
 from fastapi.responses import StreamingResponse
 from app.schemas.job import (
@@ -18,7 +18,7 @@ from app.schemas.job import (
     UpdateJobStatusRequest,
     UploadInstruction,
 )
-from app.store.memory import JOBS, Job
+
 from app.services.azure_storage_service import AzureStorageService
 from app.services.azure_queue_service import AzureQueueService
 from app.services.job_repository import JobRepository
@@ -32,15 +32,16 @@ queue_service = AzureQueueService()
 @router.post("", response_model=CreateJobResponse)
 def create_job(req: CreateJobRequest):
     job_id = str(uuid.uuid4())
-    job = Job(
-        job_id=job_id,
-        title=req.title,
-        description=req.description,
-        status="created",
-        assets=req.assets,
-    )
+    job = {
+        "job_id": job_id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "title": req.title,
+        "description": req.description,
+        "status": "created",
+        "assets": req.assets,
+    }
 
-    job_repository.create_job(job_id, job.__dict__)
+    job_repository.create_job(job_id, job)
     job = job_repository.get_job(job_id)
 
     if req.assets:
@@ -127,16 +128,17 @@ def patch_job(job_id: str, req: UpdateJobStatusRequest):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     
-    job_repository.update_status(job_id, req.status)
+    job_repository.update_status(job_id, req.status, req.youtube_video_id)
     job = job_repository.get_job(job_id)
     return JobStatusResponse(
         job_id=job["job_id"],
         status=job["status"],
+        created_at=job.get("created_at"),
         title=job["title"],
         description=job["description"],
         assets=job["assets"],
-        youtube_url=job["youtube_url"],
-        error=job["error"],
+        youtube_video_id=job.get("youtube_video_id"),
+        error=job.get("error"),
     )
     
 
@@ -152,8 +154,10 @@ def get_job(job_id: str):
         title=job["title"],
         description=job["description"],
         assets=job["assets"],
-        youtube_url=job["youtube_url"],
-        error=job["error"],
+        youtube_video_id=job.get("youtube_video_id"),
+        error=job.get("error"),
+        created_at=job.get("created_at"),
+        progress=get_progress(job["job_id"]), 
     )
 
 @router.patch("/{job_id}/progress")
@@ -161,21 +165,69 @@ def update_progress(job_id: str, req: UpdateJobProgressRequest):
     job = job_repository.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    set_progress(job_id, req.progress)
+    set_progress(job_id, req.rendering_progress, req.publishing_progress)
     return {"ok": True}
 
 @router.get("/{job_id}/stream")
 async def stream_progress(job_id: str):
     async def event_stream():
         while True:
-            job = job_repository.get_job(job_id)
-            if not job:
+            try:
+                job = job_repository.get_job(job_id)
+                if not job:
+                    break
+
+                progress = get_progress(job_id)
+                status = job.get("status", "unknown")
+
+                payload = {
+                    "rendering_progress": progress.get("rendering_progress", 0),
+                    "publishing_progress": progress.get("publishing_progress", 0),
+                    "status": status,
+                }
+
+                yield f"data: {json.dumps(payload)}\n\n"
+
+                if status in ("published", "failed"):
+                    clear_progress(job_id)
+                    break
+
+                await asyncio.sleep(1)
+
+            except Exception as e:
+                print(f"SSE stream error for job {job_id}: {e}")
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
                 break
-            progress = get_progress(job_id)
-            status = job.get("status", "unknown")
-            yield f"data: {json.dumps({'progress': progress, 'status': status})}\n\n"
-            if status in ("rendered", "failed"):
-                clear_progress(job_id)
-                break
-            await asyncio.sleep(1)
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no", 
+            "Connection": "keep-alive",
+        }
+    )
+
+@router.get("")
+async def list_jobs():
+    try:
+        jobs = job_repository.get_all_jobs()
+        return [
+            {
+                "job_id": job["job_id"],
+                "status": job["status"],
+                "title": job["title"],
+                "created_at": job.get("created_at"),
+                "description": job["description"],
+                "assets": job["assets"],
+                "youtube_video_id": job.get("youtube_video_id"),
+                "error": job.get("error"),
+                "progress": get_progress(job["job_id"]),
+            }
+            for job in jobs
+        ]
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))

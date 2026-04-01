@@ -1,19 +1,34 @@
 import os
-import pickle
+import json
+from pathlib import Path
+from dotenv import load_dotenv
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+_ENV_PATH = Path(__file__).resolve().parent / ".env"
+load_dotenv(dotenv_path=_ENV_PATH, override=True)
 
-GOOGLE_CREDENTIALS_PATH = os.getenv("GOOGLE_CREDENTIALS_PATH", "")
+YOUTUBE_SCOPES = [
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube.readonly",
+]
 
-flow = InstalledAppFlow.from_client_secrets_file(
-    r"C:\Users\kylez\projects\auto-media-publisher\gcp-credentials.json", 
-    SCOPES
+GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS_JSON", "")
+
+print("GOOGLE_CREDENTIALS_JSON present:", bool(GOOGLE_CREDENTIALS_JSON))
+
+if not GOOGLE_CREDENTIALS_JSON:
+    raise RuntimeError("GOOGLE_CREDENTIALS_JSON is not set")
+
+client_config = json.loads(GOOGLE_CREDENTIALS_JSON)
+
+flow = InstalledAppFlow.from_client_config(
+    client_config,
+    scopes=YOUTUBE_SCOPES,
 )
 
 creds = flow.run_local_server(port=0)
 
-with open("google_token.json", "wb") as token:
-    pickle.dump(creds, token)
+with open("google_token.json", "w", encoding="utf-8") as token:
+    token.write(creds.to_json())
 
 print("Token saved to google_token.json")

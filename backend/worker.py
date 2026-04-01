@@ -9,9 +9,9 @@ from dotenv import load_dotenv
 import requests
 import traceback
 from azure.storage.queue import QueueClient
-from azure.storage.blob import BlobClient, BlobServiceClient, generate_blob_sas, BlobSasPermissions, ContentSettings
+from azure.storage.blob import BlobServiceClient, ContentSettings
 
-import pickle
+from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
@@ -35,8 +35,9 @@ FFPROBE_PATH = os.getenv("FFPROBE_PATH", "ffprobe")
 blob_service_client = BlobServiceClient.from_connection_string(AZURE_CONNECTION_STRING)
 uploads_container_client = blob_service_client.get_container_client(AZURE_UPLOADS_CONTAINER)
 processed_container_client = blob_service_client.get_container_client(AZURE_PROCESSED_CONTAINER)
-GOOGLE_CREDENTIALS_PATH = os.getenv("GOOGLE_CREDENTIALS_PATH", "")
-GOOGLE_TOKEN_PATH = os.getenv("GOOGLE_TOKEN_PATH", "")
+
+GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS_JSON", "")
+GOOGLE_TOKEN_JSON = os.getenv("GOOGLE_TOKEN_JSON", "")
 
 YOUTUBE_SCOPES = ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly"]
 
@@ -44,19 +45,34 @@ YOUTUBE_CHANNEL_ID = os.getenv("FCNABC_CHANNEL_ID", "")
 
 def get_youtube_client():
     creds = None
-    if os.path.exists(GOOGLE_TOKEN_PATH):
-        with open(GOOGLE_TOKEN_PATH, "rb") as token_file:
-            creds = pickle.load(token_file)
+    if GOOGLE_TOKEN_JSON:
+        token_info = json.loads(GOOGLE_TOKEN_JSON)
+        creds = Credentials.from_authorized_user_info(token_info, YOUTUBE_SCOPES)
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(GOOGLE_CREDENTIALS_PATH, YOUTUBE_SCOPES)
-            creds = flow.run_local_server(port=0)
+            if not GOOGLE_CREDENTIALS_JSON:
+                raise RuntimeError("GOOGLE_CREDENTIALS_JSON is not set")
 
-        with open(GOOGLE_TOKEN_PATH, "wb") as token_file:
-            pickle.dump(creds, token_file)
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=".json",
+                delete=False,
+                encoding="utf-8",
+            ) as temp_creds_file:
+                temp_creds_file.write(GOOGLE_CREDENTIALS_JSON)
+                temp_creds_path = temp_creds_file.name
+
+            try:
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    temp_creds_path,
+                    YOUTUBE_SCOPES,
+                )
+                creds = flow.run_local_server(port=0)
+            finally:
+                Path(temp_creds_path).unlink(missing_ok=True)
 
     return build("youtube", "v3", credentials=creds)
 
@@ -83,7 +99,7 @@ def upload_to_youtube(video_path: Path, title: str, description: str = "", job_i
         if status:
             print(f"Upload progress for job {job_id}: {int(status.progress() * 100)}%")
             if job_id:
-                api_patch(f"/jobs/{job_id}/progress", json={"progress": int(status.progress() * 100)})
+                api_patch(f"/jobs/{job_id}/progress", json={"publishing_progress": int(status.progress() * 100), "status": "publishing"})
 
     video_id = response.get("id")
     print(f"Upload complete for job {job_id}. Video ID: {video_id}")
@@ -111,7 +127,11 @@ def api_header():
     return {"X-API-Key": PUBLISHER_SERVICE_API_KEY}
 
 def api_patch(path: str, json: dict) -> requests.Response:
-    return requests.patch(f"{API_BASE_URL}{path}", json=json, headers=api_header())
+    url = f"{API_BASE_URL}{path}"
+    print(f"PATCH {url} {json}")
+    response = requests.patch(url, json=json, headers=api_header())
+    print(f"PATCH {url} -> {response.status_code} {response.text}")
+    return response
 
 def get_ordered_clips(job_data: dict) -> list[dict]:
     clips = [a for a in job_data["assets"] if a["kind"] == "clip"]
@@ -124,8 +144,28 @@ def get_latest_thumbnail(job_data: dict) -> dict | None:
 
 def download_blob_to_file(container_client, blob_name: str, download_path: Path) -> None:
     blob_client = container_client.get_blob_client(blob_name)
+
+    properties = blob_client.get_blob_properties()
+    total_size = properties.size
+
+    downloaded = 0
+    last_reported = -1
+
+    stream = blob_client.download_blob()
+
     with open(download_path, "wb") as download_file:
-        download_file.write(blob_client.download_blob().readall())
+        for chunk in stream.chunks():
+            download_file.write(chunk)
+
+            downloaded += len(chunk)
+            percent = int((downloaded / total_size) * 100)
+
+            if percent >= last_reported + 5:
+                print(
+                    f"Downloading {blob_name}: {percent}% "
+                    f"({downloaded / 1024 / 1024:.1f} MB / {total_size / 1024 / 1024:.1f} MB)"
+                )
+                last_reported = percent
 
 def download_ordered_clips(job_id:str, job_data: dict, work_dir: Path, container_client):
     clips = get_ordered_clips(job_data)
@@ -211,7 +251,7 @@ def render_with_processing(clip_paths: list[Path], output_path: Path, job_id: st
                 elapsed = int(h) * 3600 + int(m) * 60 + float(s)
                 percent = min(int((elapsed / total_duration) * 100), 99)
                 if percent >= last_reported + 5:
-                    api_patch(f"/jobs/{job_id}/progress", json={"progress": percent})
+                    api_patch(f"/jobs/{job_id}/progress", json={"rendering_progress": percent})
                     last_reported = percent
 
     process.wait()
@@ -221,30 +261,6 @@ def render_with_processing(clip_paths: list[Path], output_path: Path, job_id: st
     concat_file = output_path.parent / "concat.txt"
     write_concat_file(clip_paths, concat_file)
 
-    cmd = [
-        FFMPEG_PATH,
-        "-y",
-        "-f", "concat",
-        "-safe", "0",
-        "-i", str(concat_file),
-
-        # Pick only the first audio stream, ignore the second
-        "-map", "0:v:0",
-        "-map", "0:a:0",
-
-        "-af", "highpass=f=80,afftdn,lowpass=f=8000",
-
-        "-c:v", "libx264",
-        "-preset", "medium",
-        "-crf", "18",
-        "-c:a", "aac",
-        "-b:a", "192k",
-
-        str(output_path),
-    ]
-
-    subprocess.run(cmd, check=True)
-
 def upload_blob_from_file(container_client, blob_name: str, file_path: Path, content_type: str) -> None:
     blob_client = container_client.get_blob_client(blob_name)
     with open(file_path, "rb") as data:
@@ -253,7 +269,6 @@ def upload_blob_from_file(container_client, blob_name: str, file_path: Path, con
             overwrite=True,
             content_settings=ContentSettings(content_type=content_type),
         )
-
 def process_job(job_id: str, job_data: dict) -> Path:
     clips_data = get_ordered_clips(job_data)
 
@@ -266,6 +281,87 @@ def process_job(job_id: str, job_data: dict) -> Path:
     if persisted_out_path.exists():
         print(f"Rendered output already exists for job {job_id}, skipping render.")
         return persisted_out_path, persisted_thumbnail_path
+
+    persisted_clip_paths = []
+    for clip in clips_data:
+        persisted_clip_path = Path.cwd() / f"{job_id}_clip_{clip['filename']}"
+        if persisted_clip_path.exists():
+            print(f"Clip already downloaded: {persisted_clip_path}")
+            persisted_clip_paths.append(persisted_clip_path)
+
+    persisted_thumbnail_path = next(Path.cwd().glob(f"{job_id}_thumbnail.*"), None)
+    if persisted_thumbnail_path:
+        print(f"Thumbnail already downloaded: {persisted_thumbnail_path}")
+
+    clips_already_downloaded = len(persisted_clip_paths) == len(clips_data)
+    thumbnail_already_downloaded = persisted_thumbnail_path is not None
+
+    with tempfile.TemporaryDirectory(prefix=f"job_{job_id}_") as temp_dir:
+        work_dir_path = Path(temp_dir)
+
+        if clips_already_downloaded:
+            clip_paths = persisted_clip_paths
+        else:
+            clip_paths = download_ordered_clips(job_id, job_data, work_dir_path, uploads_container_client)
+
+            persisted_clip_paths = []
+            for clip_path in clip_paths:
+                dest = Path.cwd() / f"{job_id}_clip_{clip_path.name}"
+                dest.write_bytes(clip_path.read_bytes())
+                persisted_clip_paths.append(dest)
+                print(f"Persisted clip to {dest}")
+            clip_paths = persisted_clip_paths
+
+        if thumbnail_already_downloaded:
+            thumbnail_path = persisted_thumbnail_path
+        else:
+            thumbnail_path = download_latest_thumbnail(job_id, job_data, work_dir_path, uploads_container_client)
+            if thumbnail_path:
+                suffix = thumbnail_path.suffix
+                persisted_thumbnail_path = Path.cwd() / f"{job_id}_thumbnail{suffix}"
+                persisted_thumbnail_path.write_bytes(thumbnail_path.read_bytes())
+                thumbnail_path = persisted_thumbnail_path
+                print(f"Persisted thumbnail to {thumbnail_path}")
+
+        out_path = work_dir_path / f"{job_id}_output.mp4"
+
+        try:
+            render_with_processing(clip_paths, out_path, job_id)
+        except subprocess.CalledProcessError as e:
+            print(f"Error during rendering job {job_id}: {e}")
+            api_patch(f"/jobs/{job_id}/status", json={"status": "failed"})
+            raise
+
+        persisted_out_path = Path.cwd() / f"{job_id}_output_persisted.mp4"
+        persisted_out_path.write_bytes(out_path.read_bytes())
+
+        return persisted_out_path, thumbnail_path
+    
+    clips_data = get_ordered_clips(job_data)
+
+    if not clips_data:
+        raise ValueError("No clips found in job data")
+    
+    persisted_out_path = Path.cwd() / f"{job_id}_output_persisted.mp4"
+    persisted_thumbnail_path = next(Path.cwd().glob(f"{job_id}_thumbnail.*"), None)
+
+    if persisted_out_path.exists():
+        print(f"Rendered output already exists for job {job_id}, skipping render.")
+        return persisted_out_path, persisted_thumbnail_path
+    
+    persisted_clip_paths = []
+    for clip in clips_data:
+        persisted_clip_path = Path.cwd() / f"{job_id}_clip_{clip['filename']}"
+        if persisted_clip_path.exists():
+            print(f"Clip already downloaded: {persisted_clip_path}")
+            persisted_clip_paths.append(persisted_clip_path)
+
+    persisted_thumbnail_path = next(Path.cwd().glob(f"{job_id}_thumbnail.*"), None)
+    if persisted_thumbnail_path:
+        print(f"Thumbnail already downloaded: {persisted_thumbnail_path}")
+
+    clips_already_downloaded = len(persisted_clip_paths) == len(clips_data)
+    thumbnail_already_downloaded = persisted_thumbnail_path is not None
 
     with tempfile.TemporaryDirectory(prefix=f"job_{job_id}_") as temp_dir:
         work_dir_path = Path(temp_dir)
@@ -285,7 +381,7 @@ def process_job(job_id: str, job_data: dict) -> Path:
         except subprocess.CalledProcessError as e:
             print(f"Error during rendering job {job_id}: {e}")
 
-            update_status_response = api_patch(f"/jobs/{job_id}/status", json={"status": "Error during rendering"})
+            update_status_response = api_patch(f"/jobs/{job_id}/status", json={"status": "failed"})
             if update_status_response.status_code != 200:
                 print(f"Failed to update job status for job {job_id}: {update_status_response.status_code} - {update_status_response.text}")
 
@@ -315,7 +411,7 @@ def main_once():
         queue_name=AZURE_QUEUE_NAME,
     )
 
-    messages = queue.receive_messages(messages_per_page=1, visibility_timeout=150)
+    messages = queue.receive_messages(messages_per_page=1, visibility_timeout=10)
     message = next(messages, None)
 
     if not message:
@@ -338,7 +434,15 @@ def main_once():
         print(f"Processing job {job_id}: {job_data}")
 
         try:
-            output_path, thumbnail_path = process_job(job_id, job_data)
+            try:
+                output_path = None
+                thumbnail_path = None
+                output_path, thumbnail_path = process_job(job_id, job_data)
+            except Exception as e:
+                print(f"Error processing job {job_id}: {e}")
+                api_patch(f"/jobs/{job_id}/status", json={"status": "failed"})
+                raise
+
             upload_blob_from_file(
                 processed_container_client,
                 f"{date.today().isoformat()}_{job_id}_{output_path.name}",
@@ -348,19 +452,26 @@ def main_once():
 
             api_patch(f"/jobs/{job_id}/status", json={"status": "rendered"})
 
-            print(f"Job {job_id} processed successfully. Output saved to {output_path}")
-
             job_title = job_data.get("title", f"Video {job_id}")
             job_description = job_data.get("description", "")
 
             youtube_video_id = upload_to_youtube(output_path, job_title, job_description, job_id, thumbnail_path)
 
-            api_patch(f"/jobs/{job_id}", json={"youtube_video_id": youtube_video_id, "status": "Published"})
+            api_patch(f"/jobs/{job_id}/status", json={"youtube_video_id": youtube_video_id, "status": "published"})
 
-
-            # only delete if processing succeeds
             queue.delete_message(message)
             print("Message deleted after successful processing.")
+
+            if output_path and output_path.exists():
+                output_path.unlink()
+            if thumbnail_path and thumbnail_path.exists():
+                thumbnail_path.unlink()
+
+            for clip in job_data.get("assets", []):
+                if clip["kind"] == "clip":
+                    p = Path.cwd() / f"{job_id}_clip_{clip['filename']}"
+                    if p.exists():
+                        p.unlink()
         
         except Exception as e:
             print(f"Error processing job {job_id}: {e}")

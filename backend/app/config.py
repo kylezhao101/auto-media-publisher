@@ -79,7 +79,7 @@ BLOB_CONTAINER_JOBS = _get_env_or_secret(
 AZURE_BLOB_ENDPOINT = _get_env_or_secret(
     "AZURE_BLOB_ENDPOINT",
     secret_name="azure-blob-endpoint",
-)
+).rstrip("/")
 
 AZURE_QUEUE_NAME = _get_env_or_secret(
     "AZURE_QUEUE_NAME",
