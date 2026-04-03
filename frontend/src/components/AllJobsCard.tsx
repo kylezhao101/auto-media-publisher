@@ -8,13 +8,6 @@ type JobWithProgress = JobStatusResponse & {
     progress?: { rendering_progress: number; publishing_progress: number }
 }
 
-const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
-    published: "default",
-    queued: "secondary",
-    uploading: "secondary",
-    processing: "secondary",
-    failed: "destructive",
-}
 
 const STATUS_COLORS: Record<string, string> = {
     published: "border-green-500 text-green-600",
