@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { setApiKey } from "@/store/apiKeyStore"
-import { getJob } from "@/lib/api"
+import { validateApiKey } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -22,13 +22,11 @@ export function ApiKeyGate({ onAuthenticated }: Props) {
         setApiKey(key.trim())
 
         try {
-            await getJob("test")
+            await validateApiKey()
         } catch (err: any) {
-            if (err.status != 404) {
-                setError("Invalid API key")
-                setIsLoading(false)
-                return
-            }
+            setError(err.response?.data?.detail || "Invalid API key")
+            setIsLoading(false)
+            return
         }
 
         setIsLoading(false)

@@ -4,13 +4,26 @@ import type { JobStatusResponse } from "@/types/job"
 
 type ServerStatusCardProps = {
     serverJob: JobStatusResponse | null
-    progress?: number
+    progress?: {
+        rendering_progress?: number
+        publishing_progress?: number
+    }
 }
 
-const RENDERING_STATUSES = ["queued", "rendering"]
+const RENDERING_STATUSES = ["queued", "rendering", "rendered", "publishing", "published"]
+const PUBLISHING_STATUSES = ["rendered", "publishing", "published"]
 
-export default function ServerStatusCard({ serverJob, progress = 0 }: ServerStatusCardProps) {
-    const isRendering = serverJob && RENDERING_STATUSES.includes(serverJob.status)
+export default function ServerStatusCard({ serverJob, progress: { rendering_progress = 0, publishing_progress = 0 } = {} }: ServerStatusCardProps) {
+
+    const renderingProgress = serverJob?.progress?.rendering_progress ?? rendering_progress
+    const publishingProgress = serverJob?.progress?.publishing_progress ?? publishing_progress
+
+    const isRendering = serverJob && (RENDERING_STATUSES.includes(serverJob.status) || renderingProgress > 0)
+    const isPublishing = serverJob && (PUBLISHING_STATUSES.includes(serverJob.status) || publishingProgress > 0)
+
+
+    console.log("[ServerStatusCard]", { serverJob, rendering_progress, publishing_progress, renderingProgress, publishingProgress })
+
 
     return (
         <Card>
@@ -33,9 +46,19 @@ export default function ServerStatusCard({ serverJob, progress = 0 }: ServerStat
                             <div className="space-y-1">
                                 <div className="flex justify-between text-xs text-muted-foreground">
                                     <span>Rendering</span>
-                                    <span>{progress}%</span>
+                                    <span>{renderingProgress}%</span>
                                 </div>
-                                <Progress value={progress} className="h-2" />
+                                <Progress value={renderingProgress} className="h-2" />
+                            </div>
+                        )}
+
+                        {isPublishing && (
+                            <div className="space-y-1">
+                                <div className="flex justify-between text-xs text-muted-foreground">
+                                    <span>Publishing</span>
+                                    <span>{publishingProgress}%</span>
+                                </div>
+                                <Progress value={publishingProgress} className="h-2" />
                             </div>
                         )}
 
@@ -44,10 +67,10 @@ export default function ServerStatusCard({ serverJob, progress = 0 }: ServerStat
                             <span>{serverJob.assets.length}</span>
                         </div>
 
-                        {serverJob.youtube_url && (
+                        {serverJob.youtube_video_id && (
                             <div>
                                 <a
-                                    href={serverJob.youtube_url}
+                                    href={`https://www.youtube.com/watch?v=${serverJob.youtube_video_id}`}
                                     target="_blank"
                                     rel="noreferrer"
                                     className="text-primary underline underline-offset-4"

@@ -109,3 +109,19 @@ export async function getJob(jobId: string): Promise<JobStatusResponse> {
   });
   return res.data;
 }
+
+export async function validateApiKey(): Promise<void> {
+  const res = await api.post("/validate-api-key", undefined, {
+    meta: { label: "Validate API Key" },
+  });
+
+  return res.data;
+}
+
+export async function getAllJobs(): Promise<JobStatusResponse[]> {
+  const res = await api.get<JobStatusResponse[]>("/jobs", {
+    meta: { label: "Get All Jobs" },
+  });
+  console.log(res)
+  return res.data;
+}

@@ -1,17 +1,12 @@
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card"
 
 import JobDetailsCard from "@/components/JobDetailsCard"
 import ThumbnailCard from "@/components/ThumbnailCard"
-import { useApiLogs } from "./hooks/useApiLog"
+// import { useApiLogs } from "./hooks/useApiLog"
 import ClipsCard from "./components/ClipsCard"
 import ActionsCard from "./components/ActionsCard"
 import ReviewCard from "./components/reviewCard"
@@ -20,16 +15,22 @@ import { hasApiKey } from "@/store/apiKeyStore"
 import { ApiKeyGate } from "@/components/ApiKeyGate"
 import { useState } from "react"
 import { useJobWorkflow } from "./hooks/useJobWorkflow"
+import AllJobsCard from "./components/AllJobsCard"
+import { Button } from "./components/ui/button"
+import { Input } from "./components/ui/input"
 
 export function App() {
 
   const workflow = useJobWorkflow()
-  const { logs: apiLogs, clearLogs } = useApiLogs()
   const [authenticated, setAuthenticated] = useState(hasApiKey())
+  const [jobIdInput, setJobIdInput] = useState("")
+
 
   if (!authenticated) {
     return <ApiKeyGate onAuthenticated={() => setAuthenticated(true)} />
   }
+
+  console.log(workflow)
 
   return (
     <main className="min-h-svh bg-background p-6 md:p-8">
@@ -48,6 +49,27 @@ export function App() {
           <Badge variant="outline">Job ID: {workflow.jobId ?? "Not created"}</Badge>
           {workflow.clips.length > 0 && <Badge variant="outline">{workflow.clips.length} clips</Badge>}
           {workflow.thumbnail && <Badge variant="outline">Thumbnail selected</Badge>}
+
+          <div className="flex items-center gap-2 ml-auto">
+            <Input
+              placeholder="Paste job ID to resume..."
+              value={jobIdInput}
+              onChange={(e) => setJobIdInput(e.target.value)}
+              className="h-7 w-72 text-xs"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              disabled={!jobIdInput.trim()}
+              onClick={() => {
+                workflow.handleLoadJob(jobIdInput.trim())
+                setJobIdInput("")
+              }}
+            >
+              Load
+            </Button>
+          </div>
         </div>
 
         {workflow.error && (
@@ -102,12 +124,18 @@ export function App() {
               clips={workflow.clips}
             />
 
-            <ServerStatusCard serverJob={workflow.serverJob} progress={workflow.progress} />
-
+            <ServerStatusCard
+              serverJob={workflow.serverJob}
+              progress={workflow.progress}
+            />
           </div>
-
         </div>
-        <Card>
+
+
+        <AllJobsCard jobs={workflow.allJobs} />
+
+
+        {/* <Card>
           <CardHeader className="flex flex-row items-start justify-between space-y-0">
             <div>
               <CardTitle>API Activity</CardTitle>
@@ -123,7 +151,6 @@ export function App() {
               Clear
             </Button>
           </CardHeader>
-
           <CardContent>
             {apiLogs.length === 0 ? (
               <p className="text-sm text-muted-foreground">No API activity yet.</p>
@@ -185,7 +212,7 @@ export function App() {
               </ScrollArea>
             )}
           </CardContent>
-        </Card>
+        </Card> */}
       </div>
     </main>
   )

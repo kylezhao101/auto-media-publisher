@@ -56,9 +56,15 @@ export interface SubmitJobResponse {
 export interface JobStatusResponse {
     job_id: string;
     status: string;
+    created_at?: string;
     title: string;
     description: string;
     assets: UploadAsset[];
-    youtube_url?: string | null;
+    youtube_video_id?: string | null;
     error?: string | null;
+
+    progress?: {
+        rendering_progress: number
+        publishing_progress: number
+    }
 }
