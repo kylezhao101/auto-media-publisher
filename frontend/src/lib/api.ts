@@ -122,6 +122,5 @@ export async function getAllJobs(): Promise<JobStatusResponse[]> {
   const res = await api.get<JobStatusResponse[]>("/jobs", {
     meta: { label: "Get All Jobs" },
   });
-  console.log(res)
   return res.data;
 }

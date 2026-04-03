@@ -30,8 +30,6 @@ export function App() {
     return <ApiKeyGate onAuthenticated={() => setAuthenticated(true)} />
   }
 
-  console.log(workflow)
-
   return (
     <main className="min-h-svh bg-background p-6 md:p-8">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">

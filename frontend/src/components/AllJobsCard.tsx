@@ -39,7 +39,7 @@ export default function AllJobsCard({ jobs }: { jobs: JobWithProgress[] }) {
                             {jobs.map((job) => (
                                 <div key={job.job_id} className="rounded-lg border p-4 flex flex-col gap-2">
                                     <div className="flex flex-wrap items-center justify-between gap-2">
-                                        <span className="font-medium text-sm">{job.title || "Untitled"}</span>
+                                        <span className="font-medium text-sm">{job.title || "Untitled"} <span className="text-muted-foreground">| {job.job_id || "Untitled"}</span></span>
                                         <Badge variant="outline" className={STATUS_COLORS[job.status] ?? ""}>
                                             {job.status}
                                         </Badge>

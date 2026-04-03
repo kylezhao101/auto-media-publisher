@@ -21,10 +21,6 @@ export default function ServerStatusCard({ serverJob, progress: { rendering_prog
     const isRendering = serverJob && (RENDERING_STATUSES.includes(serverJob.status) || renderingProgress > 0)
     const isPublishing = serverJob && (PUBLISHING_STATUSES.includes(serverJob.status) || publishingProgress > 0)
 
-
-    console.log("[ServerStatusCard]", { serverJob, rendering_progress, publishing_progress, renderingProgress, publishingProgress })
-
-
     return (
         <Card>
             <CardHeader>

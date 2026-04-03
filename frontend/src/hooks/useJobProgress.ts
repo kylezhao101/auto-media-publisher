@@ -25,9 +25,6 @@ export function useJobProgress(
     if (!jobId || !ACTIVE_STATUSES.includes(status)) return
 
     function connect() {
-      console.log("[SSE] connecting to", jobId)
-
-
       const url = `${API_BASE_URL}/jobs/${jobId}/stream`
       const apiKey = getApiKey()
       const es = new EventSource(`${url}?api_key=${apiKey}`)
@@ -35,8 +32,6 @@ export function useJobProgress(
 
       es.onmessage = (e) => {
         const data = JSON.parse(e.data)
-
-        console.log("[SSE]", data)
 
         setProgress({
           rendering_progress: data.rendering_progress ?? 0,
@@ -61,7 +56,6 @@ export function useJobProgress(
       }
 
       es.onerror = (e) => {
-        console.log("[SSE] error, will reconnect", e)
         es.close()
         if (!["published", "failed"].includes(status)) {
           reconnectTimer.current = setTimeout(connect, RECONNECT_DELAY_MS)
