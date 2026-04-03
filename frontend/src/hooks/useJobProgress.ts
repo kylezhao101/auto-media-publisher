@@ -56,6 +56,7 @@ export function useJobProgress(
       }
 
       es.onerror = (e) => {
+        console.error("SSE error:", e)
         es.close()
         if (!["published", "failed"].includes(status)) {
           reconnectTimer.current = setTimeout(connect, RECONNECT_DELAY_MS)
