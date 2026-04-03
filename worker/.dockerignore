@@ -1,0 +1,12 @@
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.git
+.env
+.pytest_cache
+.mypy_cache
+.vscode
+.google_token.json
+.gcp-credentials.json
