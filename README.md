@@ -36,8 +36,8 @@ Features include:
 ## Backend API
 - FastAPI
 - Docker
-- Azure Blob Storage (planned / in progress)
-- Azure Queue Storage (planned / in progress)
+- Azure Blob Storage
+- Azure Queue Storage
 
 The backend handles:
 - job creation
@@ -50,19 +50,14 @@ The FastAPI app runs in Docker.
 ---
 
 ## Worker
-WORK IN PROGRESS
+- consumes queued processing jobs
+- merges uploaded video clips
+- runs FFmpeg post-processing
+- generates final media output
+- publishes to YouTube
+- updates job status
 
-The background worker is currently being implemented.
-
-Planned responsibilities:
-- consume queued processing jobs
-- merge uploaded video clips
-- run FFmpeg post-processing
-- generate final media output
-- publish to YouTube
-- update job status
-
-Planned deployment target:
+Deployment target:
 - Azure Container Apps worker
 - queue-triggered processing
 
@@ -76,7 +71,10 @@ Planned deployment target:
 ### Backend
 - Containerized FastAPI service
 - Docker-based deployment
-- planned Azure Container Apps deployment
+- Deployed via Azure Container Apps
+
+### Worker
+- Deployed via Azure Container Apps wor
 
 ---
 
@@ -89,13 +87,15 @@ Currently in active development.
 - job workflow UI
 - FastAPI backend scaffolding
 - Dockerized API service
-
-### In Progress
 - worker pipeline
 - queue orchestration
 - cloud storage integration
 - automated publishing flow
 
+### In Progress
+- CI/CD deployment to Azure via GitHub actions
+- Email alerts
+  
 ## Deployment / Run Commands
 
 ### Run FastAPI locally with Docker
