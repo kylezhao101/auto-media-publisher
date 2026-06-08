@@ -33,15 +33,23 @@ PUBLISHER_SERVICE_API_KEY = os.getenv("API_KEY", "")
 FFPROBE_PATH = os.getenv("FFPROBE_PATH", "ffprobe")
 
 blob_service_client = BlobServiceClient.from_connection_string(AZURE_CONNECTION_STRING)
-uploads_container_client = blob_service_client.get_container_client(AZURE_UPLOADS_CONTAINER)
-processed_container_client = blob_service_client.get_container_client(AZURE_PROCESSED_CONTAINER)
+uploads_container_client = blob_service_client.get_container_client(
+    AZURE_UPLOADS_CONTAINER
+)
+processed_container_client = blob_service_client.get_container_client(
+    AZURE_PROCESSED_CONTAINER
+)
 
 GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS_JSON", "")
 GOOGLE_TOKEN_JSON = os.getenv("GOOGLE_TOKEN_JSON", "")
 
-YOUTUBE_SCOPES = ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly"]
+YOUTUBE_SCOPES = [
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube.readonly",
+]
 
 YOUTUBE_CHANNEL_ID = os.getenv("FCNABC_CHANNEL_ID", "")
+
 
 def get_youtube_client():
     if not GOOGLE_TOKEN_JSON:
@@ -60,7 +68,14 @@ def get_youtube_client():
 
     return build("youtube", "v3", credentials=creds)
 
-def upload_to_youtube(video_path: Path, title: str, description: str = "", job_id: str = "", thumbnail_path: Path | None = None) -> str:
+
+def upload_to_youtube(
+    video_path: Path,
+    title: str,
+    description: str = "",
+    job_id: str = "",
+    thumbnail_path: Path | None = None,
+) -> str:
     youtube_client = get_youtube_client()
 
     body = {
@@ -71,11 +86,15 @@ def upload_to_youtube(video_path: Path, title: str, description: str = "", job_i
         "status": {
             "privacyStatus": "private",
             "selfDeclaredMadeForKids": False,
-        }
+        },
     }
 
-    media = MediaFileUpload(str(video_path), mimetype="video/mp4", resumable=True, chunksize=5 * 1024 * 1024)
-    request = youtube_client.videos().insert(part="snippet,status", body=body, media_body=media)
+    media = MediaFileUpload(
+        str(video_path), mimetype="video/mp4", resumable=True, chunksize=5 * 1024 * 1024
+    )
+    request = youtube_client.videos().insert(
+        part="snippet,status", body=body, media_body=media
+    )
 
     response = None
     while response is None:
@@ -83,7 +102,13 @@ def upload_to_youtube(video_path: Path, title: str, description: str = "", job_i
         if status:
             print(f"Upload progress for job {job_id}: {int(status.progress() * 100)}%")
             if job_id:
-                api_patch(f"/jobs/{job_id}/progress", json={"publishing_progress": int(status.progress() * 100), "status": "publishing"})
+                api_patch(
+                    f"/jobs/{job_id}/progress",
+                    json={
+                        "publishing_progress": int(status.progress() * 100),
+                        "status": "publishing",
+                    },
+                )
 
     video_id = response.get("id")
     print(f"Upload complete for job {job_id}. Video ID: {video_id}")
@@ -96,7 +121,7 @@ def upload_to_youtube(video_path: Path, title: str, description: str = "", job_i
         try:
             youtube_client.thumbnails().set(
                 videoId=video_id,
-                media_body=MediaFileUpload(str(thumbnail_path), mimetype=mime_type)
+                media_body=MediaFileUpload(str(thumbnail_path), mimetype=mime_type),
             ).execute()
             print(f"Thumbnail uploaded for job {job_id}.")
         except Exception as e:
@@ -110,6 +135,7 @@ def upload_to_youtube(video_path: Path, title: str, description: str = "", job_i
 def api_header():
     return {"X-API-Key": PUBLISHER_SERVICE_API_KEY}
 
+
 def api_patch(path: str, json: dict) -> requests.Response:
     url = f"{API_BASE_URL}{path}"
     print(f"PATCH {url} {json}")
@@ -117,16 +143,21 @@ def api_patch(path: str, json: dict) -> requests.Response:
     print(f"PATCH {url} -> {response.status_code} {response.text}")
     return response
 
+
 def get_ordered_clips(job_data: dict) -> list[dict]:
     clips = [a for a in job_data["assets"] if a["kind"] == "clip"]
     clips.sort(key=lambda x: (x.get("sequence") is None, x.get("sequence", 10**9)))
     return clips
 
+
 def get_latest_thumbnail(job_data: dict) -> dict | None:
     thumbnails = [a for a in job_data["assets"] if a["kind"] == "thumbnail"]
     return thumbnails[-1] if thumbnails else None
 
-def download_blob_to_file(container_client, blob_name: str, download_path: Path) -> None:
+
+def download_blob_to_file(
+    container_client, blob_name: str, download_path: Path
+) -> None:
     blob_client = container_client.get_blob_client(blob_name)
 
     properties = blob_client.get_blob_properties()
@@ -151,32 +182,39 @@ def download_blob_to_file(container_client, blob_name: str, download_path: Path)
                 )
                 last_reported = percent
 
-def download_ordered_clips(job_id:str, job_data: dict, work_dir: Path, container_client):
+
+def download_ordered_clips(
+    job_id: str, job_data: dict, work_dir: Path, container_client
+):
     clips = get_ordered_clips(job_data)
     local_paths: list[Path] = []
 
     for clip in clips:
         filename = clip["filename"]
-        blob_name = f"{job_id}/clip/{filename}" 
+        blob_name = f"{job_id}/clip/{filename}"
         local_path = work_dir / filename
 
         download_blob_to_file(container_client, blob_name, local_path)
         local_paths.append(local_path)
-    
+
     return local_paths
 
-def download_latest_thumbnail(job_id:str, job_data: dict, work_dir: Path, container_client) -> Path | None:
+
+def download_latest_thumbnail(
+    job_id: str, job_data: dict, work_dir: Path, container_client
+) -> Path | None:
     thumbnail = get_latest_thumbnail(job_data)
     if not thumbnail:
         return None
 
     filename = thumbnail["filename"]
-    blob_name = f"{job_id}/thumbnail/{filename}" 
+    blob_name = f"{job_id}/thumbnail/{filename}"
     local_path = work_dir / filename
 
     download_blob_to_file(container_client, blob_name, local_path)
-    
+
     return local_path
+
 
 def write_concat_file(clip_paths: list[Path], concat_file: Path) -> None:
     lines = []
@@ -184,14 +222,23 @@ def write_concat_file(clip_paths: list[Path], concat_file: Path) -> None:
         lines.append(f"file '{path.as_posix()}'")
     concat_file.write_text("\n".join(lines), encoding="utf-8")
 
+
 def get_total_duration(clip_paths: list[Path]) -> float:
     total = 0.0
     for path in clip_paths:
         result = subprocess.run(
-            [FFPROBE_PATH, "-v", "error",
-             "-show_entries", "format=duration",
-             "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
-            capture_output=True, text=True
+            [
+                FFPROBE_PATH,
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
         )
         try:
             total += float(result.stdout.strip())
@@ -199,7 +246,10 @@ def get_total_duration(clip_paths: list[Path]) -> float:
             pass
     return total
 
-def render_with_processing(clip_paths: list[Path], output_path: Path, job_id: str) -> None:
+
+def render_with_processing(
+    clip_paths: list[Path], output_path: Path, job_id: str
+) -> None:
     concat_file = output_path.parent / "concat.txt"
     write_concat_file(clip_paths, concat_file)
 
@@ -208,17 +258,28 @@ def render_with_processing(clip_paths: list[Path], output_path: Path, job_id: st
     cmd = [
         FFMPEG_PATH,
         "-y",
-        "-f", "concat",
-        "-safe", "0",
-        "-i", str(concat_file),
-        "-map", "0:v:0",
-        "-map", "0:a:0",
-        "-af", "highpass=f=80,afftdn,lowpass=f=8000",
-        "-c:v", "libx264",
-        "-preset", "medium",
-        "-crf", "18",
-        "-c:a", "aac",
-        "-b:a", "192k",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        str(concat_file),
+        "-map",
+        "0:v:0",
+        "-map",
+        "0:a:0",
+        "-af",
+        "highpass=f=80,afftdn,lowpass=f=8000",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "medium",
+        "-crf",
+        "18",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
         str(output_path),
     ]
 
@@ -235,7 +296,9 @@ def render_with_processing(clip_paths: list[Path], output_path: Path, job_id: st
                 elapsed = int(h) * 3600 + int(m) * 60 + float(s)
                 percent = min(int((elapsed / total_duration) * 100), 99)
                 if percent >= last_reported + 5:
-                    api_patch(f"/jobs/{job_id}/progress", json={"rendering_progress": percent})
+                    api_patch(
+                        f"/jobs/{job_id}/progress", json={"rendering_progress": percent}
+                    )
                     last_reported = percent
 
     process.wait()
@@ -245,7 +308,10 @@ def render_with_processing(clip_paths: list[Path], output_path: Path, job_id: st
     concat_file = output_path.parent / "concat.txt"
     write_concat_file(clip_paths, concat_file)
 
-def upload_blob_from_file(container_client, blob_name: str, file_path: Path, content_type: str) -> None:
+
+def upload_blob_from_file(
+    container_client, blob_name: str, file_path: Path, content_type: str
+) -> None:
     blob_client = container_client.get_blob_client(blob_name)
     with open(file_path, "rb") as data:
         blob_client.upload_blob(
@@ -253,12 +319,14 @@ def upload_blob_from_file(container_client, blob_name: str, file_path: Path, con
             overwrite=True,
             content_settings=ContentSettings(content_type=content_type),
         )
+
+
 def process_job(job_id: str, job_data: dict) -> Path:
     clips_data = get_ordered_clips(job_data)
 
     if not clips_data:
         raise ValueError("No clips found in job data")
-    
+
     persisted_out_path = Path.cwd() / f"{job_id}_output_persisted.mp4"
     persisted_thumbnail_path = next(Path.cwd().glob(f"{job_id}_thumbnail.*"), None)
 
@@ -286,7 +354,9 @@ def process_job(job_id: str, job_data: dict) -> Path:
         if clips_already_downloaded:
             clip_paths = persisted_clip_paths
         else:
-            clip_paths = download_ordered_clips(job_id, job_data, work_dir_path, uploads_container_client)
+            clip_paths = download_ordered_clips(
+                job_id, job_data, work_dir_path, uploads_container_client
+            )
 
             persisted_clip_paths = []
             for clip_path in clip_paths:
@@ -299,7 +369,9 @@ def process_job(job_id: str, job_data: dict) -> Path:
         if thumbnail_already_downloaded:
             thumbnail_path = persisted_thumbnail_path
         else:
-            thumbnail_path = download_latest_thumbnail(job_id, job_data, work_dir_path, uploads_container_client)
+            thumbnail_path = download_latest_thumbnail(
+                job_id, job_data, work_dir_path, uploads_container_client
+            )
             if thumbnail_path:
                 suffix = thumbnail_path.suffix
                 persisted_thumbnail_path = Path.cwd() / f"{job_id}_thumbnail{suffix}"
@@ -320,19 +392,19 @@ def process_job(job_id: str, job_data: dict) -> Path:
         persisted_out_path.write_bytes(out_path.read_bytes())
 
         return persisted_out_path, thumbnail_path
-    
+
     clips_data = get_ordered_clips(job_data)
 
     if not clips_data:
         raise ValueError("No clips found in job data")
-    
+
     persisted_out_path = Path.cwd() / f"{job_id}_output_persisted.mp4"
     persisted_thumbnail_path = next(Path.cwd().glob(f"{job_id}_thumbnail.*"), None)
 
     if persisted_out_path.exists():
         print(f"Rendered output already exists for job {job_id}, skipping render.")
         return persisted_out_path, persisted_thumbnail_path
-    
+
     persisted_clip_paths = []
     for clip in clips_data:
         persisted_clip_path = Path.cwd() / f"{job_id}_clip_{clip['filename']}"
@@ -349,15 +421,19 @@ def process_job(job_id: str, job_data: dict) -> Path:
 
     with tempfile.TemporaryDirectory(prefix=f"job_{job_id}_") as temp_dir:
         work_dir_path = Path(temp_dir)
-        clip_paths = download_ordered_clips(job_id, job_data, work_dir_path, uploads_container_client)
-        thumbnail_path = download_latest_thumbnail(job_id, job_data, work_dir_path, uploads_container_client)
+        clip_paths = download_ordered_clips(
+            job_id, job_data, work_dir_path, uploads_container_client
+        )
+        thumbnail_path = download_latest_thumbnail(
+            job_id, job_data, work_dir_path, uploads_container_client
+        )
 
         for path in clip_paths:
             print(f"Downloaded clip to {path}")
 
         if thumbnail_path:
             print(f"Downloaded thumbnail to {thumbnail_path}")
-        
+
         out_path = work_dir_path / f"{job_id}_output.mp4"
 
         try:
@@ -365,9 +441,13 @@ def process_job(job_id: str, job_data: dict) -> Path:
         except subprocess.CalledProcessError as e:
             print(f"Error during rendering job {job_id}: {e}")
 
-            update_status_response = api_patch(f"/jobs/{job_id}/status", json={"status": "failed"})
+            update_status_response = api_patch(
+                f"/jobs/{job_id}/status", json={"status": "failed"}
+            )
             if update_status_response.status_code != 200:
-                print(f"Failed to update job status for job {job_id}: {update_status_response.status_code} - {update_status_response.text}")
+                print(
+                    f"Failed to update job status for job {job_id}: {update_status_response.status_code} - {update_status_response.text}"
+                )
 
             raise
 
@@ -411,7 +491,9 @@ def main_once():
         if not job_id:
             raise ValueError("Queue message missing job_id")
 
-        job_response = requests.get(f"{API_BASE_URL}/jobs/{job_id}", headers=api_header())
+        job_response = requests.get(
+            f"{API_BASE_URL}/jobs/{job_id}", headers=api_header()
+        )
         job_response.raise_for_status()
 
         job_data = job_response.json()
@@ -439,9 +521,14 @@ def main_once():
             job_title = job_data.get("title", f"Video {job_id}")
             job_description = job_data.get("description", "")
 
-            youtube_video_id = upload_to_youtube(output_path, job_title, job_description, job_id, thumbnail_path)
+            youtube_video_id = upload_to_youtube(
+                output_path, job_title, job_description, job_id, thumbnail_path
+            )
 
-            api_patch(f"/jobs/{job_id}/status", json={"youtube_video_id": youtube_video_id, "status": "published"})
+            api_patch(
+                f"/jobs/{job_id}/status",
+                json={"youtube_video_id": youtube_video_id, "status": "published"},
+            )
 
             queue.delete_message(message)
             print("Message deleted after successful processing.")
@@ -456,7 +543,7 @@ def main_once():
                     p = Path.cwd() / f"{job_id}_clip_{clip['filename']}"
                     if p.exists():
                         p.unlink()
-        
+
         except Exception as e:
             print(f"Error processing job {job_id}: {e}")
             traceback.print_exc()
