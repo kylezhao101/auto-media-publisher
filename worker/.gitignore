@@ -3,3 +3,6 @@ __pycache__
 .env
 gcp-credentials.json
 google_token.json
+
+build
+dist
