@@ -1,11 +1,6 @@
-# Electron builder
+binaries/
 desktop/release/
 desktop/dist-electron/
-
-# Python / PyInstaller
 worker/build/
 worker/dist/
 worker/*.spec
-
-# Packaged binaries if you don't want them in Git
-binaries/
