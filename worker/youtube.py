@@ -23,6 +23,7 @@ GOOGLE_TOKEN_PATH = APP_DATA / "google-token.json"
 YOUTUBE_SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube.readonly",
+    "https://www.googleapis.com/auth/youtube.force-ssl",
 ]
 
 RETRIABLE_EXCEPTIONS = (
@@ -105,13 +106,17 @@ def upload_video(
     title: str,
     description: str,
     thumbnail_path: Path | None = None,
+    visibility: str = "private",
+    playlist_ids: list[str] | None = None,
     on_progress=None,
 ) -> str:
     youtube = get_youtube_client()
 
+    playlist_ids = playlist_ids or []
+
     body = {
         "snippet": {"title": title, "description": description},
-        "status": {"privacyStatus": "private", "selfDeclaredMadeForKids": False},
+        "status": {"privacyStatus": visibility, "selfDeclaredMadeForKids": False},
     }
 
     media = MediaFileUpload(
@@ -131,6 +136,10 @@ def upload_video(
     if thumbnail_path and video_id:
         _upload_thumbnail(youtube, video_id, thumbnail_path)
 
+    if video_id:
+        for playlist_id in playlist_ids:
+            _add_video_to_playlist(youtube, video_id, playlist_id)
+
     return video_id
 
 
@@ -149,6 +158,59 @@ def _upload_thumbnail(youtube, video_id: str, thumbnail_path: Path) -> None:
         print(
             json.dumps(
                 {"stage": "warning", "message": f"Thumbnail upload failed: {e}"}
+            ),
+            flush=True,
+        )
+
+
+def list_playlists() -> list[dict]:
+    youtube = get_youtube_client()
+
+    playlists = []
+
+    request = youtube.playlists().list(
+        part="snippet",
+        mine=True,
+        maxResults=50,
+    )
+
+    while request:
+        response = request.execute()
+
+        for item in response.get("items", []):
+            playlists.append(
+                {
+                    "id": item["id"],
+                    "title": item["snippet"]["title"],
+                }
+            )
+
+        request = youtube.playlists().list_next(request, response)
+
+    return playlists
+
+
+def _add_video_to_playlist(youtube, video_id: str, playlist_id: str) -> None:
+    try:
+        youtube.playlistItems().insert(
+            part="snippet",
+            body={
+                "snippet": {
+                    "playlistId": playlist_id,
+                    "resourceId": {
+                        "kind": "youtube#video",
+                        "videoId": video_id,
+                    },
+                }
+            },
+        ).execute()
+    except Exception as e:
+        print(
+            json.dumps(
+                {
+                    "stage": "warning",
+                    "message": f"Failed to add video to playlist {playlist_id}: {e}",
+                }
             ),
             flush=True,
         )
