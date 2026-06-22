@@ -97,6 +97,12 @@ ipcMain.handle("get-auth-status", async () => {
 });
 
 ipcMain.handle("connect-to-youtube", async () => {
+  const tokenPath = path.join(getAppDataDir(), "google-token.json");
+
+  if (fs.existsSync(tokenPath)) {
+    fs.unlinkSync(tokenPath);
+  }
+
   const child = spawn(getTokenBin, getTokenArgs, {
     cwd: isDev ? workerDir : packagedWorkerDir,
     env: process.env,
@@ -144,6 +150,48 @@ ipcMain.handle("select-thumbnail", async () => {
   };
 });
 
+ipcMain.handle("list-playlists", async () => {
+  const workerCwd = isDev ? workerDir : packagedWorkerDir;
+
+  const child = spawn(workerBin, workerArgs, {
+    cwd: workerCwd,
+    env: process.env,
+  });
+
+  child.stdin.write(
+    JSON.stringify({
+      mode: "list-playlists",
+    })
+  );
+  child.stdin.end();
+
+  return new Promise((resolve, reject) => {
+    let output = "";
+    let errorOutput = "";
+
+    child.stdout.on("data", (data: Buffer) => {
+      output += data.toString();
+    });
+
+    child.stderr.on("data", (data: Buffer) => {
+      errorOutput += data.toString();
+    });
+
+    child.on("close", (code) => {
+      if (code !== 0) {
+        reject(new Error(errorOutput || "Failed to load playlists"));
+        return;
+      }
+
+      try {
+        resolve(JSON.parse(output));
+      } catch {
+        reject(new Error("Playlist response was not valid JSON"));
+      }
+    });
+  });
+});
+
 ipcMain.handle("start-job", async (event, payload) => {
   const {
     clips,
@@ -153,6 +201,8 @@ ipcMain.handle("start-job", async (event, payload) => {
     mode,
     encoder,
     performance_mode,
+    visibility,
+    playlist_ids
   } = payload;
 
   const outputDir = path.join(app.getPath("videos"), "Auto Media Publisher");
@@ -174,6 +224,8 @@ ipcMain.handle("start-job", async (event, payload) => {
     output_path: outputPath,
     encoder,
     performance_mode,
+    visibility,
+    playlist_ids
   });
 
   const workerCwd = isDev ? workerDir : packagedWorkerDir;
@@ -262,8 +314,6 @@ ipcMain.handle("cancel-job", async () => {
 
   return { success: false };
 });
-
-
 
 
 app.on("before-quit", () => {
