@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("electronAPI", {
+  getAppVersion: () => ipcRenderer.invoke("get-app-version"),
   selectVideos: () => ipcRenderer.invoke("select-videos"),
   selectThumbnail: () => ipcRenderer.invoke("select-thumbnail"),
   startJob: (payload: any) => ipcRenderer.invoke("start-job", payload),

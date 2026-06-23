@@ -42,6 +42,7 @@ type StartJobPayload = {
 declare global {
     interface Window {
         electronAPI: {
+            getAppVersion: () => Promise<string>;
             selectVideos: () => Promise<string[]>;
             selectThumbnail: () => Promise<Thumbnail | null>;
             startJob: (payload: StartJobPayload) => Promise<{ success: boolean }>;
