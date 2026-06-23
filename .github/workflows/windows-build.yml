@@ -37,7 +37,11 @@ jobs:
 
       - name: Build worker.exe
         working-directory: worker
-        run: pyinstaller --onefile --nam e worker worker.py get_token.py
+        run: python -m PyInstaller --onefile --name worker worker.py
+
+      - name: Build get_token.exe
+        working-directory: worker
+        run: python -m PyInstaller --onefile --name get_token get_token.py
 
       - name: Build Electron app
         working-directory: desktop
