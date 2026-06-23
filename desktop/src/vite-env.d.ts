@@ -2,7 +2,7 @@
 
 export { };
 
-type JobProgress = {
+export type JobProgress = {
     stage: "rendering" | "uploading" | "done" | "warning";
     percent?: number;
     video_id?: string;
@@ -10,20 +10,21 @@ type JobProgress = {
     outputPath?: string;
 };
 
-type Thumbnail = {
+export type Thumbnail = {
     path: string;
     preview: string;
 };
 
-type RenderedVideo = {
+export type RenderedVideo = {
     name: string;
     path: string;
     size: number;
     modifiedAt: string;
 };
 
-type Encoder = "cpu" | "gpu";
-type PerformanceMode = "fast" | "balanced" | "low";
+export type Encoder = "cpu" | "gpu";
+export type PerformanceMode = "fast" | "balanced" | "low";
+export type Visibility = "private" | "unlisted" | "public"
 
 type StartJobPayload = {
     mode?: "render-and-upload" | "upload-existing";
@@ -34,11 +35,14 @@ type StartJobPayload = {
     output_path?: string;
     encoder: Encoder;
     performance_mode: PerformanceMode;
+    visibility: Visibility;
+    playlist_ids: string[];
 };
 
 declare global {
     interface Window {
         electronAPI: {
+            getAppVersion: () => Promise<string>;
             selectVideos: () => Promise<string[]>;
             selectThumbnail: () => Promise<Thumbnail | null>;
             startJob: (payload: StartJobPayload) => Promise<{ success: boolean }>;
@@ -49,6 +53,10 @@ declare global {
             importCredentials: () => Promise<{ success: boolean; path?: string }>;
             connectToYouTube: () => Promise<{ success: boolean }>;
             getAuthStatus: () => Promise<{ credentials: boolean; token: boolean }>;
+            listPlaylists: () => Promise<{
+                id: string;
+                title: string;
+            }[]>
         };
     }
 }

@@ -6,7 +6,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 import signal
-import subprocess
 
 ffmpeg_process = None
 
@@ -26,7 +25,7 @@ signal.signal(signal.SIGINT, shutdown)
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env", override=True)
 
 from render import render
-from youtube import upload_video
+from youtube import upload_video, list_playlists
 
 
 def emit(msg: dict):
@@ -37,14 +36,23 @@ def main():
     job = json.loads(sys.stdin.read())
 
     mode = job.get("mode", "render-and-upload")
+
+    if mode == "list-playlists":
+        playlists = list_playlists()
+        print(json.dumps(playlists), flush=True)
+        return
+
     encoder = job.get("encoder", "gpu")
-    performance_mode = job.get("performanceMode", "balanced")
+    performance_mode = job.get("performance_mode", "balanced")
 
     clip_paths = [Path(p) for p in job.get("clips", [])]
     thumbnail_path = Path(job["thumbnail"]) if job.get("thumbnail") else None
     title = job["title"]
     description = job.get("description", "")
     output_path = Path(job["output_path"])
+
+    visibility = job.get("visibility", "private")
+    playlist_ids = job.get("playlist_ids", [])
 
     if mode == "render-and-upload":
         if not clip_paths:
@@ -73,6 +81,8 @@ def main():
         title,
         description,
         thumbnail_path,
+        visibility=visibility,
+        playlist_ids=playlist_ids,
         on_progress=lambda p: emit({"stage": "uploading", "percent": p}),
     )
 

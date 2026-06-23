@@ -27,10 +27,13 @@ const getTokenBin = isDev
 
 const getTokenArgs = isDev ? [path.join(workerDir, "get_token.py")] : [];
 
+const getWindowTitle = () => `Auto Media Publisher v${app.getVersion()}`;
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1100,
     height: 750,
+    title: getWindowTitle(),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -38,11 +41,20 @@ function createWindow() {
     },
   });
 
+  win.on("page-title-updated", (event) => {
+    event.preventDefault();
+    win.setTitle(getWindowTitle());
+  });
+
   if (isDev) {
     win.loadURL("http://localhost:5173");
   } else {
     win.loadFile(path.join(__dirname, "../dist/index.html"));
   }
+
+  win.webContents.on("did-finish-load", () => {
+    win.setTitle(getWindowTitle());
+  });
 }
 
 app.whenReady().then(createWindow);
@@ -52,6 +64,11 @@ function getAppDataDir() {
   fs.mkdirSync(appDir, { recursive: true });
   return appDir;
 }
+
+ipcMain.handle("get-app-version", async () => {
+  return app.getVersion();
+});
+
 
 ipcMain.handle("get-credentials-status", async () => {
   const credentialsPath = path.join(getAppDataDir(), "gcp-credentials.json");
@@ -86,17 +103,22 @@ ipcMain.handle("import-credentials", async () => {
 ipcMain.handle("get-auth-status", async () => {
   const appDir = getAppDataDir();
 
+  const credentialsPath = path.join(appDir, "gcp-credentials.json");
+  const tokenPath = path.join(appDir, "google-token.json");
+
   return {
-    credentials: fs.existsSync(
-      path.join(appDir, "gcp-credentials.json")
-    ),
-    token: fs.existsSync(
-      path.join(appDir, "google-token.json")
-    ),
+    credentials: fs.existsSync(credentialsPath),
+    token: fs.existsSync(tokenPath),
   };
 });
 
 ipcMain.handle("connect-to-youtube", async () => {
+  const tokenPath = path.join(getAppDataDir(), "google-token.json");
+
+  if (fs.existsSync(tokenPath)) {
+    fs.unlinkSync(tokenPath);
+  }
+
   const child = spawn(getTokenBin, getTokenArgs, {
     cwd: isDev ? workerDir : packagedWorkerDir,
     env: process.env,
@@ -144,6 +166,48 @@ ipcMain.handle("select-thumbnail", async () => {
   };
 });
 
+ipcMain.handle("list-playlists", async () => {
+  const workerCwd = isDev ? workerDir : packagedWorkerDir;
+
+  const child = spawn(workerBin, workerArgs, {
+    cwd: workerCwd,
+    env: process.env,
+  });
+
+  child.stdin.write(
+    JSON.stringify({
+      mode: "list-playlists",
+    })
+  );
+  child.stdin.end();
+
+  return new Promise((resolve, reject) => {
+    let output = "";
+    let errorOutput = "";
+
+    child.stdout.on("data", (data: Buffer) => {
+      output += data.toString();
+    });
+
+    child.stderr.on("data", (data: Buffer) => {
+      errorOutput += data.toString();
+    });
+
+    child.on("close", (code) => {
+      if (code !== 0) {
+        reject(new Error(errorOutput || "Failed to load playlists"));
+        return;
+      }
+
+      try {
+        resolve(JSON.parse(output));
+      } catch {
+        reject(new Error("Playlist response was not valid JSON"));
+      }
+    });
+  });
+});
+
 ipcMain.handle("start-job", async (event, payload) => {
   const {
     clips,
@@ -153,7 +217,15 @@ ipcMain.handle("start-job", async (event, payload) => {
     mode,
     encoder,
     performance_mode,
+    visibility,
+    playlist_ids
   } = payload;
+
+  const tokenPath = path.join(getAppDataDir(), "google-token.json");
+
+  if (!fs.existsSync(tokenPath)) {
+    throw new Error("YouTube is not connected. Please connect YouTube first.");
+  }
 
   const outputDir = path.join(app.getPath("videos"), "Auto Media Publisher");
   fs.mkdirSync(outputDir, { recursive: true });
@@ -174,6 +246,8 @@ ipcMain.handle("start-job", async (event, payload) => {
     output_path: outputPath,
     encoder,
     performance_mode,
+    visibility,
+    playlist_ids
   });
 
   const workerCwd = isDev ? workerDir : packagedWorkerDir;
@@ -262,8 +336,6 @@ ipcMain.handle("cancel-job", async () => {
 
   return { success: false };
 });
-
-
 
 
 app.on("before-quit", () => {

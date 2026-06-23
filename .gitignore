@@ -1,4 +1,3 @@
-binaries/
 desktop/release/
 desktop/dist-electron/
 worker/build/
