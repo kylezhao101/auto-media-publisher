@@ -3,7 +3,7 @@ name: Windows Build
 on:
   push:
     branches:
-      - feature/v0.2
+      - pre-release
   pull_request:
 
 jobs:
