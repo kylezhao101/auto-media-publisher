@@ -2,6 +2,8 @@
 
 A cloud-native media publishing pipeline that automates video upload, post-processing, and publishing workflows.
 
+Read about it here: https://kylezhao101.com/content/projects/auto-media-publisher
+
 ## Overview
 
 Automated Media Publisher is a full-stack system for creating media publishing jobs, uploading video assets, and asynchronously processing content for final distribution.
