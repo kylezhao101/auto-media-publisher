@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
@@ -64,6 +64,16 @@ function getAppDataDir() {
   fs.mkdirSync(appDir, { recursive: true });
   return appDir;
 }
+
+function getLogDir() {
+  const logDir = path.join(getAppDataDir(), "logs");
+  fs.mkdirSync(logDir, { recursive: true });
+  return logDir;
+}
+
+ipcMain.handle("open-logs-folder", async () => {
+  await shell.openPath(getLogDir());
+});
 
 ipcMain.handle("get-app-version", async () => {
   return app.getVersion();
@@ -337,6 +347,9 @@ ipcMain.handle("cancel-job", async () => {
   return { success: false };
 });
 
+ipcMain.handle("show-in-folder", async (_event, filePath: string) => {
+  shell.showItemInFolder(filePath);
+});
 
 app.on("before-quit", () => {
   if (currentJob) {
