@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
+import { autoUpdater } from "electron-updater"
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
@@ -55,6 +56,10 @@ function createWindow() {
   win.webContents.on("did-finish-load", () => {
     win.setTitle(getWindowTitle());
   });
+
+  if (!isDev) {
+    autoUpdater.checkForUpdatesAndNotify();
+  }
 }
 
 app.whenReady().then(createWindow);
