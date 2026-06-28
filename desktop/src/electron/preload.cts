@@ -20,5 +20,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getAuthStatus: () => ipcRenderer.invoke("get-auth-status"),
   importCredentials: () => ipcRenderer.invoke("import-credentials"),
   connectToYouTube: () => ipcRenderer.invoke("connect-to-youtube"),
-  listPlaylists: () => ipcRenderer.invoke("list-playlists")
+  listPlaylists: () => ipcRenderer.invoke("list-playlists"),
+  showInFolder: (filePath: string) => ipcRenderer.invoke("show-in-folder", filePath),
+  openLogsFolder: () => ipcRenderer.invoke("open-logs-folder"),
 });

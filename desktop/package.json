@@ -1,8 +1,8 @@
 {
   "name": "desktop",
   "private": true,
-  "productName": "Auto Media Publisher",
-  "version": "0.2.0",
+  "productName": "AutoMediaPublisher",
+  "version": "0.2.1",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -10,9 +10,16 @@
     "dev:vite": "vite",
     "dev:electron": "wait-on http://localhost:5173 && tsc src/electron/main.ts src/electron/preload.cts --outDir dist-electron --module nodenext --moduleResolution nodenext --target es2022 --esModuleInterop --ignoreConfig && electron .",
     "build": "vite build && tsc src/electron/main.ts src/electron/preload.cts --outDir dist-electron --module nodenext --moduleResolution nodenext --target es2022 --esModuleInterop --ignoreConfig",
-    "dist": "npm run build && electron-builder"
+    "dist": "npm run build && electron-builder --publish never"
   },
   "build": {
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "kylezhao101",
+        "repo": "auto-media-publisher"
+      }
+    ],
     "appId": "org.fcnabc.automediapublisher",
     "productName": "AutoMediaPublisher",
     "directories": {
@@ -38,6 +45,7 @@
     }
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-select": "^5.10.2"
@@ -47,11 +55,12 @@
     "@types/node": "^24.13.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@types/semver": "^7.7.1",
     "@vitejs/plugin-react": "^6.0.1",
     "concurrently": "^10.0.3",
     "cross-env": "^10.1.0",
     "electron": "^42.3.3",
-    "electron-builder": "^26.15.2",
+    "electron-builder": "^26.15.3",
     "eslint": "^10.3.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
