@@ -56,7 +56,9 @@ declare global {
             listPlaylists: () => Promise<{
                 id: string;
                 title: string;
-            }[]>
+            }[]>;
+            showInFolder: (filePath: string) => Promise<void>;
+            openLogsFolder: () => Promise<void>;
         };
     }
 }

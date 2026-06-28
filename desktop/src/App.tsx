@@ -280,6 +280,12 @@ function App() {
           >
             Connect YouTube
           </button>
+          <button
+            type="button"
+            onClick={() => window.electronAPI.openLogsFolder()}
+          >
+            Open logs
+          </button>
         </div>
       </section>
 
@@ -483,13 +489,20 @@ function App() {
                     {new Date(render.modifiedAt).toLocaleString()}
                   </p>
                 </div>
-
-                <button
-                  onClick={() => handleUploadExisting(render)}
-                  disabled={isRunning || !authStatus.token}
-                >
-                  Upload this
-                </button>
+                <div className="row">
+                  <button
+                    onClick={() => handleUploadExisting(render)}
+                    disabled={isRunning || !authStatus.token}
+                  >
+                    Upload this
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.electronAPI.showInFolder(render.path)}
+                  >
+                    Show in folder
+                  </button>
+                </div>
               </div>
             ))}
           </div>

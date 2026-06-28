@@ -4,6 +4,7 @@ import os
 import re
 import subprocess
 from pathlib import Path
+import sys
 
 FFMPEG_PATH = os.getenv("FFMPEG_PATH", "ffmpeg")
 FFPROBE_PATH = os.getenv("FFPROBE_PATH", "ffprobe")
@@ -12,6 +13,10 @@ ffmpeg_process: subprocess.Popen | None = None
 
 
 def get_total_duration(clip_paths: list[Path]) -> float:
+
+    print("FFPROBE_PATH:", repr(FFPROBE_PATH), file=sys.stderr, flush=True)
+    print("EXISTS:", Path(FFPROBE_PATH).exists(), file=sys.stderr, flush=True)
+
     total = 0.0
 
     for p in clip_paths:
