@@ -1,10 +1,13 @@
-name: Windows Build
+name: Windows Release
 
 on:
   push:
-    branches:
-      - pre-release
+    tags:
+      - "v*"
   pull_request:
+
+permissions:
+  contents: write
 
 jobs:
   build-windows:
@@ -45,10 +48,16 @@ jobs:
 
       - name: Build Electron app
         working-directory: desktop
-        run: npm run dist
+        run: npm run build
 
-      - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: AutoMediaPublisher-Windows
-          path: desktop/release/*
+      - name: Package app for PR check
+        if: github.event_name == 'pull_request'
+        working-directory: desktop
+        run: npx electron-builder --publish never
+
+      - name: Build and create draft release
+        if: startsWith(github.ref, 'refs/tags/')
+        working-directory: desktop
+        run: npx electron-builder --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
