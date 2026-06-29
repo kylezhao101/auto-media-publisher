@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 jobs:
-  build-windows:
+  release-windows:
     runs-on: windows-latest
 
     steps:
