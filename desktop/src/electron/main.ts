@@ -1,10 +1,12 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
-import { autoUpdater } from "electron-updater"
+import updater from "electron-updater"
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
 
 import { ChildProcess, spawn } from "child_process";
+
+const { autoUpdater } = updater;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,6 +31,40 @@ const getTokenBin = isDev
 const getTokenArgs = isDev ? [path.join(workerDir, "get_token.py")] : [];
 
 const getWindowTitle = () => `Auto Media Publisher v${app.getVersion()}`;
+
+function setupAutoUpdater(win: BrowserWindow) {
+  if (isDev) return;
+
+  autoUpdater.on("update-available", (info) => {
+    console.log("[updater] update available", info.version);
+  });
+
+  autoUpdater.on("update-not-available", () => {
+    console.log("[updater] no update available");
+  });
+
+  autoUpdater.on("error", (err) => {
+    console.error("[updater] error", err);
+  });
+
+  autoUpdater.on("update-downloaded", async (info) => {
+    const result = await dialog.showMessageBox(win, {
+      type: "info",
+      title: "Update Ready",
+      message: `Version ${info.version} has been downloaded.`,
+      detail: "Restart now to install the update?",
+      buttons: ["Restart", "Later"],
+      defaultId: 0,
+      cancelId: 1,
+    });
+
+    if (result.response === 0) {
+      autoUpdater.quitAndInstall();
+    }
+  });
+
+  autoUpdater.checkForUpdates();
+}
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -57,9 +93,7 @@ function createWindow() {
     win.setTitle(getWindowTitle());
   });
 
-  if (!isDev) {
-    autoUpdater.checkForUpdatesAndNotify();
-  }
+  setupAutoUpdater(win);
 }
 
 app.whenReady().then(createWindow);
