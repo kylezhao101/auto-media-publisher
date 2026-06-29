@@ -403,6 +403,7 @@ function App() {
               <span>Playlists</span>
 
               <Select<PlaylistOption, true>
+                classNamePrefix="playlist-select"
                 isMulti
                 options={playlistOptions}
                 isDisabled={isRunning || !authStatus.token}
