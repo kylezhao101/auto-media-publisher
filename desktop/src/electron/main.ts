@@ -33,18 +33,32 @@ const getTokenArgs = isDev ? [path.join(workerDir, "get_token.py")] : [];
 const getWindowTitle = () => `Auto Media Publisher v${app.getVersion()}`;
 
 function setupAutoUpdater(win: BrowserWindow) {
-  if (isDev) return;
+  // if (isDev) return;
 
+  autoUpdater.forceDevUpdateConfig = true;
+  autoUpdater.checkForUpdates();
   autoUpdater.on("update-available", (info) => {
-    console.log("[updater] update available", info.version);
+    dialog.showMessageBox(win, {
+      type: "info",
+      title: "Update available",
+      message: `Update available: ${info.version}`,
+    });
   });
 
-  autoUpdater.on("update-not-available", () => {
-    console.log("[updater] no update available");
+  autoUpdater.on("update-not-available", (info) => {
+    dialog.showMessageBox(win, {
+      type: "info",
+      title: "No update",
+      message: `No update found. Latest: ${info.version}`,
+    });
   });
 
   autoUpdater.on("error", (err) => {
-    console.error("[updater] error", err);
+    dialog.showMessageBox(win, {
+      type: "error",
+      title: "Updater error",
+      message: err.message,
+    });
   });
 
   autoUpdater.on("update-downloaded", async (info) => {
