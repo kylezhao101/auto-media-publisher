@@ -104,6 +104,13 @@ function createWindow() {
 
 app.whenReady().then(createWindow);
 
+function getWorkerEnv() {
+  return {
+    ...process.env,
+    AMP_APP_DATA_DIR: getAppDataDir(),
+  };
+}
+
 function getAppDataDir() {
   const appDir = path.join(app.getPath("appData"), "AutoMediaPublisher");
   fs.mkdirSync(appDir, { recursive: true });
@@ -176,7 +183,7 @@ ipcMain.handle("connect-to-youtube", async () => {
 
   const child = spawn(getTokenBin, getTokenArgs, {
     cwd: isDev ? workerDir : packagedWorkerDir,
-    env: process.env,
+    env: getWorkerEnv(),
   });
 
   return new Promise((resolve, reject) => {
@@ -226,7 +233,7 @@ ipcMain.handle("list-playlists", async () => {
 
   const child = spawn(workerBin, workerArgs, {
     cwd: workerCwd,
-    env: process.env,
+    env: getWorkerEnv(),
   });
 
   child.stdin.write(
@@ -308,7 +315,7 @@ ipcMain.handle("start-job", async (event, payload) => {
   const workerCwd = isDev ? workerDir : packagedWorkerDir;
 
   const workerEnv = {
-    ...process.env,
+    ...getWorkerEnv(),
 
     FFMPEG_PATH: isDev
       ? "ffmpeg"

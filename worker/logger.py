@@ -7,7 +7,11 @@ from logging.handlers import RotatingFileHandler
 
 
 def setup_logger(name: str = "worker") -> logging.Logger:
-    log_dir = Path(os.getenv("AMP_LOG_DIR", ".")) / "logs"
+    default_app_data = Path(os.getenv("APPDATA", ".")) / "AutoMediaPublisher"
+
+    app_data = Path(os.getenv("AMP_APP_DATA_DIR", str(default_app_data)))
+
+    log_dir = app_data / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 
     logger = logging.getLogger(name)
@@ -24,9 +28,7 @@ def setup_logger(name: str = "worker") -> logging.Logger:
         encoding="utf-8",
     )
 
-    formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
-
-    handler.setFormatter(formatter)
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
     logger.addHandler(handler)
 
     logger.info(
