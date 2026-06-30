@@ -2,7 +2,7 @@
   "name": "desktop",
   "private": true,
   "productName": "AutoMediaPublisher",
-  "version": "0.2.1",
+  "version": "0.2.8",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -10,14 +10,15 @@
     "dev:vite": "vite",
     "dev:electron": "wait-on http://localhost:5173 && tsc src/electron/main.ts src/electron/preload.cts --outDir dist-electron --module nodenext --moduleResolution nodenext --target es2022 --esModuleInterop --ignoreConfig && electron .",
     "build": "vite build && tsc src/electron/main.ts src/electron/preload.cts --outDir dist-electron --module nodenext --moduleResolution nodenext --target es2022 --esModuleInterop --ignoreConfig",
-    "dist": "npm run build && electron-builder --publish never"
+    "dist": "npm run build && electron-builder --publish onTagOrDraft"
   },
   "build": {
     "publish": [
       {
         "provider": "github",
         "owner": "kylezhao101",
-        "repo": "auto-media-publisher"
+        "repo": "auto-media-publisher",
+        "releaseType": "draft"
       }
     ],
     "appId": "org.fcnabc.automediapublisher",

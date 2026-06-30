@@ -35,16 +35,22 @@ const getWindowTitle = () => `Auto Media Publisher v${app.getVersion()}`;
 function setupAutoUpdater(win: BrowserWindow) {
   if (isDev) return;
 
+  autoUpdater.forceDevUpdateConfig = true;
+  autoUpdater.checkForUpdates();
   autoUpdater.on("update-available", (info) => {
-    console.log("[updater] update available", info.version);
-  });
-
-  autoUpdater.on("update-not-available", () => {
-    console.log("[updater] no update available");
+    dialog.showMessageBox(win, {
+      type: "info",
+      title: "Update available",
+      message: `Update available: ${info.version}`,
+    });
   });
 
   autoUpdater.on("error", (err) => {
-    console.error("[updater] error", err);
+    dialog.showMessageBox(win, {
+      type: "error",
+      title: "Updater error",
+      message: err.message,
+    });
   });
 
   autoUpdater.on("update-downloaded", async (info) => {
@@ -97,6 +103,13 @@ function createWindow() {
 }
 
 app.whenReady().then(createWindow);
+
+function getWorkerEnv() {
+  return {
+    ...process.env,
+    AMP_APP_DATA_DIR: getAppDataDir(),
+  };
+}
 
 function getAppDataDir() {
   const appDir = path.join(app.getPath("appData"), "AutoMediaPublisher");
@@ -170,7 +183,7 @@ ipcMain.handle("connect-to-youtube", async () => {
 
   const child = spawn(getTokenBin, getTokenArgs, {
     cwd: isDev ? workerDir : packagedWorkerDir,
-    env: process.env,
+    env: getWorkerEnv(),
   });
 
   return new Promise((resolve, reject) => {
@@ -220,7 +233,7 @@ ipcMain.handle("list-playlists", async () => {
 
   const child = spawn(workerBin, workerArgs, {
     cwd: workerCwd,
-    env: process.env,
+    env: getWorkerEnv(),
   });
 
   child.stdin.write(
@@ -302,7 +315,7 @@ ipcMain.handle("start-job", async (event, payload) => {
   const workerCwd = isDev ? workerDir : packagedWorkerDir;
 
   const workerEnv = {
-    ...process.env,
+    ...getWorkerEnv(),
 
     FFMPEG_PATH: isDev
       ? "ffmpeg"
