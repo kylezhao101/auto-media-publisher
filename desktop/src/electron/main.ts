@@ -3,7 +3,17 @@ import updater from "electron-updater"
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
-
+import {
+  isDev,
+  preparePackagedBinary,
+  getPackagedFFmpegPath,
+  getPackagedFFprobePath,
+  getPythonExecutable,
+  getWorkerExecutable,
+  getTokenExecutable,
+  isMac
+} from "./../helpers/platform";
+import { getAppDataDir, getLogDir } from "./../helpers/paths";
 import { ChildProcess, spawn } from "child_process";
 
 const { autoUpdater } = updater;
@@ -11,24 +21,31 @@ const { autoUpdater } = updater;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const isDev = !app.isPackaged;
 const workerDir = path.join(__dirname, "../../worker");
-
-let currentJob: ChildProcess | null = null;
-
 const packagedWorkerDir = path.join(process.resourcesPath, "worker");
 
-const workerBin = isDev
-  ? "python"
-  : path.join(packagedWorkerDir, "worker.exe");
+const pythonBin = getPythonExecutable();
 
-const workerArgs = isDev ? [path.join(workerDir, "worker.py")] : [];
+const workerExecutable = getWorkerExecutable();
+const tokenExecutable = getTokenExecutable();
+
+const workerBin = isDev
+  ? pythonBin
+  : path.join(packagedWorkerDir, workerExecutable);
+
+const workerArgs = isDev
+  ? [path.join(workerDir, "worker.py")]
+  : [];
 
 const getTokenBin = isDev
-  ? "python"
-  : path.join(packagedWorkerDir, "get_token.exe");
+  ? pythonBin
+  : path.join(packagedWorkerDir, tokenExecutable);
 
-const getTokenArgs = isDev ? [path.join(workerDir, "get_token.py")] : [];
+const getTokenArgs = isDev
+  ? [path.join(workerDir, "get_token.py")]
+  : [];
+
+let currentJob: ChildProcess | null = null;
 
 const getWindowTitle = () => `Auto Media Publisher v${app.getVersion()}`;
 
@@ -111,17 +128,6 @@ function getWorkerEnv() {
   };
 }
 
-function getAppDataDir() {
-  const appDir = path.join(app.getPath("appData"), "AutoMediaPublisher");
-  fs.mkdirSync(appDir, { recursive: true });
-  return appDir;
-}
-
-function getLogDir() {
-  const logDir = path.join(getAppDataDir(), "logs");
-  fs.mkdirSync(logDir, { recursive: true });
-  return logDir;
-}
 
 ipcMain.handle("open-logs-folder", async () => {
   await shell.openPath(getLogDir());
@@ -181,6 +187,8 @@ ipcMain.handle("connect-to-youtube", async () => {
     fs.unlinkSync(tokenPath);
   }
 
+  preparePackagedBinary(getTokenBin);
+
   const child = spawn(getTokenBin, getTokenArgs, {
     cwd: isDev ? workerDir : packagedWorkerDir,
     env: getWorkerEnv(),
@@ -230,6 +238,8 @@ ipcMain.handle("select-thumbnail", async () => {
 
 ipcMain.handle("list-playlists", async () => {
   const workerCwd = isDev ? workerDir : packagedWorkerDir;
+
+  preparePackagedBinary(workerBin);
 
   const child = spawn(workerBin, workerArgs, {
     cwd: workerCwd,
@@ -317,22 +327,11 @@ ipcMain.handle("start-job", async (event, payload) => {
   const workerEnv = {
     ...getWorkerEnv(),
 
-    FFMPEG_PATH: isDev
-      ? "ffmpeg"
-      : path.join(
-        process.resourcesPath,
-        "ffmpeg",
-        "ffmpeg.exe"
-      ),
-
-    FFPROBE_PATH: isDev
-      ? "ffprobe"
-      : path.join(
-        process.resourcesPath,
-        "ffmpeg",
-        "ffprobe.exe"
-      ),
+    FFMPEG_PATH: isDev || isMac ? "ffmpeg" : getPackagedFFmpegPath(),
+    FFPROBE_PATH: isDev || isMac ? "ffprobe" : getPackagedFFprobePath(),
   };
+
+  preparePackagedBinary(workerBin);
 
   const child = spawn(workerBin, workerArgs, {
     cwd: workerCwd,
