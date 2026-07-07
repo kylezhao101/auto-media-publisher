@@ -12,8 +12,8 @@ import {
   getWorkerExecutable,
   getTokenExecutable,
   isMac
-} from "./../helpers/platform";
-import { getAppDataDir, getLogDir } from "./../helpers/paths";
+} from "./../helpers/platform.js";
+import { getAppDataDir, getLogDir } from "./../helpers/paths.js";
 import { ChildProcess, spawn } from "child_process";
 
 const { autoUpdater } = updater;
