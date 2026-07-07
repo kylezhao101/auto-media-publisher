@@ -55,14 +55,49 @@ const getWindowTitle = () => `Auto Media Publisher v${app.getVersion()}`;
 function setupAutoUpdater(win: BrowserWindow) {
   if (isDev) return;
 
-  autoUpdater.forceDevUpdateConfig = true;
-  autoUpdater.checkForUpdates();
-  autoUpdater.on("update-available", (info) => {
-    dialog.showMessageBox(win, {
+  autoUpdater.autoDownload = false;
+
+  autoUpdater.on("update-available", async (info) => {
+    const result = await dialog.showMessageBox(win, {
       type: "info",
       title: "Update available",
-      message: `Update available: ${info.version}`,
+      message: `Version ${info.version} is available.`,
+      detail: "Download and install it now?",
+      buttons: ["Download", "Later"],
+      defaultId: 0,
+      cancelId: 1,
     });
+
+    if (result.response === 0) {
+      autoUpdater.downloadUpdate();
+    }
+  });
+
+  autoUpdater.on("download-progress", (progress) => {
+    console.log(`Downloading: ${progress.percent.toFixed(1)}%`);
+
+    win.webContents.send("update-progress", {
+      percent: progress.percent,
+      transferred: progress.transferred,
+      total: progress.total,
+      bytesPerSecond: progress.bytesPerSecond,
+    });
+  });
+
+  autoUpdater.on("update-downloaded", async (info) => {
+    const result = await dialog.showMessageBox(win, {
+      type: "info",
+      title: "Update ready",
+      message: `Version ${info.version} has been downloaded.`,
+      detail: "Restart now to install the update?",
+      buttons: ["Restart now", "Later"],
+      defaultId: 0,
+      cancelId: 1,
+    });
+
+    if (result.response === 0) {
+      autoUpdater.quitAndInstall();
+    }
   });
 
   autoUpdater.on("error", (err) => {
@@ -71,22 +106,6 @@ function setupAutoUpdater(win: BrowserWindow) {
       title: "Updater error",
       message: err.message,
     });
-  });
-
-  autoUpdater.on("update-downloaded", async (info) => {
-    const result = await dialog.showMessageBox(win, {
-      type: "info",
-      title: "Update Ready",
-      message: `Version ${info.version} has been downloaded.`,
-      detail: "Restart now to install the update?",
-      buttons: ["Restart", "Later"],
-      defaultId: 0,
-      cancelId: 1,
-    });
-
-    if (result.response === 0) {
-      autoUpdater.quitAndInstall();
-    }
   });
 
   autoUpdater.checkForUpdates();
