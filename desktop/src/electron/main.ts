@@ -21,7 +21,10 @@ const { autoUpdater } = updater;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const workerDir = path.join(__dirname, "../../worker");
+const workerDir = isDev
+  ? path.join(app.getAppPath(), "../worker")
+  : path.join(__dirname, "../../worker");
+
 const packagedWorkerDir = path.join(process.resourcesPath, "worker");
 
 const pythonBin = getPythonExecutable();
