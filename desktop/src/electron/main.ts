@@ -3,7 +3,17 @@ import updater from "electron-updater"
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
-
+import {
+  isDev,
+  preparePackagedBinary,
+  getPackagedFFmpegPath,
+  getPackagedFFprobePath,
+  getPythonExecutable,
+  getWorkerExecutable,
+  getTokenExecutable,
+  isMac
+} from "./../helpers/platform.js";
+import { getAppDataDir, getLogDir } from "./../helpers/paths.js";
 import { ChildProcess, spawn } from "child_process";
 
 const { autoUpdater } = updater;
@@ -11,38 +21,83 @@ const { autoUpdater } = updater;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const isDev = !app.isPackaged;
-const workerDir = path.join(__dirname, "../../worker");
-
-let currentJob: ChildProcess | null = null;
+const workerDir = isDev
+  ? path.join(app.getAppPath(), "../worker")
+  : path.join(__dirname, "../../worker");
 
 const packagedWorkerDir = path.join(process.resourcesPath, "worker");
 
-const workerBin = isDev
-  ? "python"
-  : path.join(packagedWorkerDir, "worker.exe");
+const pythonBin = getPythonExecutable();
 
-const workerArgs = isDev ? [path.join(workerDir, "worker.py")] : [];
+const workerExecutable = getWorkerExecutable();
+const tokenExecutable = getTokenExecutable();
+
+const workerBin = isDev
+  ? pythonBin
+  : path.join(packagedWorkerDir, workerExecutable);
+
+const workerArgs = isDev
+  ? [path.join(workerDir, "worker.py")]
+  : [];
 
 const getTokenBin = isDev
-  ? "python"
-  : path.join(packagedWorkerDir, "get_token.exe");
+  ? pythonBin
+  : path.join(packagedWorkerDir, tokenExecutable);
 
-const getTokenArgs = isDev ? [path.join(workerDir, "get_token.py")] : [];
+const getTokenArgs = isDev
+  ? [path.join(workerDir, "get_token.py")]
+  : [];
+
+let currentJob: ChildProcess | null = null;
 
 const getWindowTitle = () => `Auto Media Publisher v${app.getVersion()}`;
 
 function setupAutoUpdater(win: BrowserWindow) {
   if (isDev) return;
 
-  autoUpdater.forceDevUpdateConfig = true;
-  autoUpdater.checkForUpdates();
-  autoUpdater.on("update-available", (info) => {
-    dialog.showMessageBox(win, {
+  autoUpdater.autoDownload = false;
+
+  autoUpdater.on("update-available", async (info) => {
+    const result = await dialog.showMessageBox(win, {
       type: "info",
       title: "Update available",
-      message: `Update available: ${info.version}`,
+      message: `Version ${info.version} is available.`,
+      detail: "Download and install it now?",
+      buttons: ["Download", "Later"],
+      defaultId: 0,
+      cancelId: 1,
     });
+
+    if (result.response === 0) {
+      autoUpdater.downloadUpdate();
+    }
+  });
+
+  autoUpdater.on("download-progress", (progress) => {
+    console.log(`Downloading: ${progress.percent.toFixed(1)}%`);
+
+    win.webContents.send("update-progress", {
+      percent: progress.percent,
+      transferred: progress.transferred,
+      total: progress.total,
+      bytesPerSecond: progress.bytesPerSecond,
+    });
+  });
+
+  autoUpdater.on("update-downloaded", async (info) => {
+    const result = await dialog.showMessageBox(win, {
+      type: "info",
+      title: "Update ready",
+      message: `Version ${info.version} has been downloaded.`,
+      detail: "Restart now to install the update?",
+      buttons: ["Restart now", "Later"],
+      defaultId: 0,
+      cancelId: 1,
+    });
+
+    if (result.response === 0) {
+      autoUpdater.quitAndInstall();
+    }
   });
 
   autoUpdater.on("error", (err) => {
@@ -51,22 +106,6 @@ function setupAutoUpdater(win: BrowserWindow) {
       title: "Updater error",
       message: err.message,
     });
-  });
-
-  autoUpdater.on("update-downloaded", async (info) => {
-    const result = await dialog.showMessageBox(win, {
-      type: "info",
-      title: "Update Ready",
-      message: `Version ${info.version} has been downloaded.`,
-      detail: "Restart now to install the update?",
-      buttons: ["Restart", "Later"],
-      defaultId: 0,
-      cancelId: 1,
-    });
-
-    if (result.response === 0) {
-      autoUpdater.quitAndInstall();
-    }
   });
 
   autoUpdater.checkForUpdates();
@@ -92,7 +131,7 @@ function createWindow() {
   if (isDev) {
     win.loadURL("http://localhost:5173");
   } else {
-    win.loadFile(path.join(__dirname, "../dist/index.html"));
+    win.loadFile(path.join(__dirname, "../../dist/index.html"));
   }
 
   win.webContents.on("did-finish-load", () => {
@@ -111,17 +150,6 @@ function getWorkerEnv() {
   };
 }
 
-function getAppDataDir() {
-  const appDir = path.join(app.getPath("appData"), "AutoMediaPublisher");
-  fs.mkdirSync(appDir, { recursive: true });
-  return appDir;
-}
-
-function getLogDir() {
-  const logDir = path.join(getAppDataDir(), "logs");
-  fs.mkdirSync(logDir, { recursive: true });
-  return logDir;
-}
 
 ipcMain.handle("open-logs-folder", async () => {
   await shell.openPath(getLogDir());
@@ -181,6 +209,8 @@ ipcMain.handle("connect-to-youtube", async () => {
     fs.unlinkSync(tokenPath);
   }
 
+  preparePackagedBinary(getTokenBin);
+
   const child = spawn(getTokenBin, getTokenArgs, {
     cwd: isDev ? workerDir : packagedWorkerDir,
     env: getWorkerEnv(),
@@ -230,6 +260,8 @@ ipcMain.handle("select-thumbnail", async () => {
 
 ipcMain.handle("list-playlists", async () => {
   const workerCwd = isDev ? workerDir : packagedWorkerDir;
+
+  preparePackagedBinary(workerBin);
 
   const child = spawn(workerBin, workerArgs, {
     cwd: workerCwd,
@@ -317,22 +349,11 @@ ipcMain.handle("start-job", async (event, payload) => {
   const workerEnv = {
     ...getWorkerEnv(),
 
-    FFMPEG_PATH: isDev
-      ? "ffmpeg"
-      : path.join(
-        process.resourcesPath,
-        "ffmpeg",
-        "ffmpeg.exe"
-      ),
-
-    FFPROBE_PATH: isDev
-      ? "ffprobe"
-      : path.join(
-        process.resourcesPath,
-        "ffmpeg",
-        "ffprobe.exe"
-      ),
+    FFMPEG_PATH: isDev || isMac ? "ffmpeg" : getPackagedFFmpegPath(),
+    FFPROBE_PATH: isDev || isMac ? "ffprobe" : getPackagedFFprobePath(),
   };
+
+  preparePackagedBinary(workerBin);
 
   const child = spawn(workerBin, workerArgs, {
     cwd: workerCwd,

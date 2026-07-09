@@ -2,9 +2,9 @@
   "name": "desktop",
   "private": true,
   "productName": "AutoMediaPublisher",
-  "version": "0.2.8",
+  "version": "0.2.11",
   "type": "module",
-  "main": "dist-electron/main.js",
+  "main": "dist-electron/electron/main.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
     "dev:vite": "vite",
@@ -43,6 +43,13 @@
     ],
     "win": {
       "target": "nsis"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.video"
     }
   },
   "dependencies": {

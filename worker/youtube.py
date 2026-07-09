@@ -15,10 +15,10 @@ import ssl
 from http.client import HTTPException
 from googleapiclient.errors import HttpError
 
-APP_DATA = Path(os.getenv("APPDATA")) / "AutoMediaPublisher"
+from app_paths import get_credentials_path, get_google_token_path
 
-GCP_CREDENTIALS_PATH = APP_DATA / "gcp-credentials.json"
-GOOGLE_TOKEN_PATH = APP_DATA / "google-token.json"
+GCP_CREDENTIALS_PATH = get_credentials_path()
+GOOGLE_TOKEN_PATH = get_google_token_path()
 
 YOUTUBE_SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
