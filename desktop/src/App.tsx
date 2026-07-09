@@ -1,127 +1,44 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Encoder, PerformanceMode, Visibility } from "./vite-env";
 import Select, { type MultiValue } from 'react-select'
-
-const DEFAULT_TITLE = "2026.6.7 | Saul's Conversion | Pastor Jiang";
-const DEFAULT_DESCRIPTION = `Saul's Conversion Acts 9:1-9
-
-[Offering]
-The offering is done through e-Transfer;
-Please e-mail your offerings to this address:
-voffer@fcnabc.org
-
-[More Info]
-Our in-person service takes place every Sunday at 2:30PM,
-for more information check out our website!
-https://www.fcnabc.ca
-`;
-
-type JobProgress = {
-  stage: "rendering" | "uploading" | "done" | "warning";
-  percent?: number;
-  video_id?: string;
-  message?: string;
-};
-
-type RenderedVideo = {
-  name: string;
-  path: string;
-  size: number;
-  modifiedAt: string;
-};
-
-type AuthStatus = {
-  credentials: boolean;
-  token: boolean;
-};
-
-type Playlist = {
-  id: string;
-  title: string;
-};
+import type { RenderedVideo, PlaylistOption, Thumbnail } from "./types/amp";
+import { DEFAULT_TITLE, DEFAULT_DESCRIPTION } from "./constants/defaults";
+import { useAuthStatus } from "./hooks/useAuthStatus";
+import { useRenders } from "./hooks/useRenders";
+import { useJobRunner } from "./hooks/useJobRunner";
+import { usePlaylists } from "./hooks/usePlaylists";
 
 function App() {
   const [videos, setVideos] = useState<string[]>([]);
-  const [thumbnail, setThumbnail] = useState<{
-    path: string;
-    preview: string;
-  } | null>(null);
-
+  const [thumbnail, setThumbnail] = useState<Thumbnail | null>(null);
   const [title, setTitle] = useState(DEFAULT_TITLE);
   const [description, setDescription] = useState(DEFAULT_DESCRIPTION);
-  const [progress, setProgress] = useState<JobProgress | null>(null);
-  const [isRunning, setIsRunning] = useState(false);
-  const [renders, setRenders] = useState<RenderedVideo[]>([]);
   const [encoder, setEncoder] = useState<Encoder>("gpu");
-  const [performanceMode, setPerformanceMode] = useState<
-    PerformanceMode
-  >("balanced");
+  const [performanceMode, setPerformanceMode] =
+    useState<PerformanceMode>("balanced");
+  const [visibilityStatus, setVisibilityStatus] =
+    useState<Visibility>("private");
 
-  const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(false);
+  const { authStatus, importCredentials, refreshAuthStatus } = useAuthStatus();
+  const { renders, loadRenders } = useRenders();
+  const {
+    progress,
+    setProgress,
+    isRunning,
+    startJob,
+    uploadExisting,
+    cancelJob,
+  } = useJobRunner();
 
-  const [authStatus, setAuthStatus] = useState<AuthStatus>({
-    credentials: false,
-    token: false,
-  });
-
-  const [visibilityStatus, setVisibilityStatus] = useState<Visibility>("private");
-  const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [selectedPlaylistIds, setSelectedPlaylistIds] = useState<string[]>([]);
-
-  type PlaylistOption = {
-    value: string;
-    label: string;
-  };
-
-  const playlistOptions: PlaylistOption[] = playlists.map((playlist) => ({
-    value: playlist.id,
-    label: playlist.title,
-  }));
-
-  const loadPlaylists = async () => {
-    if (!authStatus.token) return;
-
-    setIsLoadingPlaylists(true);
-
-    try {
-      const result = await window.electronAPI.listPlaylists();
-      setPlaylists(result);
-    } catch (err) {
-      setProgress({
-        stage: "warning",
-        message: `Failed to load playlists: ${String(err)}`,
-      });
-    } finally {
-      setIsLoadingPlaylists(false);
-    }
-  };
-
-  useEffect(() => {
-    if (authStatus.token) {
-      loadPlaylists();
-    } else {
-      setPlaylists([]);
-      setSelectedPlaylistIds([]);
-    }
-  }, [authStatus.token]);
-
-  useEffect(() => {
-    refreshAuthStatus();
-    loadRenders();
-  }, []);
-
-  const refreshAuthStatus = async () => {
-    const result = await window.electronAPI.getAuthStatus();
-    setAuthStatus(result);
-  };
-
-  const handleImportCredentials = async () => {
-    window.electronAPI.importCredentials();
-    await refreshAuthStatus();
-  };
+  const {
+    playlistOptions,
+    selectedPlaylistIds,
+    setSelectedPlaylistIds,
+    isLoadingPlaylists,
+    loadPlaylists,
+  } = usePlaylists({ authStatus, setProgress });
 
   const handleConnectYouTube = async () => {
-    setIsRunning(true);
     setProgress({ stage: "warning", message: "Opening Google sign-in..." });
 
     try {
@@ -136,8 +53,6 @@ function App() {
         stage: "warning",
         message: `YouTube connection failed: ${String(err)}`,
       });
-    } finally {
-      setIsRunning(false);
     }
   };
 
@@ -151,85 +66,33 @@ function App() {
     setThumbnail(selected);
   };
 
-  const handleStartJob = async () => {
-    setIsRunning(true);
-    setProgress({ stage: "rendering", percent: 0 });
-
-    const cleanup = window.electronAPI.onJobProgress((msg) => {
-      setProgress(msg);
-
-      if (msg.stage === "done" || msg.stage === "warning") {
-        setIsRunning(false);
-        cleanup();
-      }
+  const handleStartJob = () =>
+    startJob({
+      videos,
+      thumbnail,
+      title,
+      description,
+      encoder,
+      performanceMode,
+      visibilityStatus,
+      selectedPlaylistIds,
+      loadRenders,
     });
 
-    try {
-      await window.electronAPI.startJob({
-        mode: "render-and-upload",
-        clips: videos,
-        thumbnail,
-        title,
-        description,
-        encoder,
-        performance_mode: performanceMode,
-        visibility: visibilityStatus,
-        playlist_ids: selectedPlaylistIds,
-      });
-
-      await loadRenders();
-    } catch (err) {
-      setProgress({ stage: "warning", message: String(err) });
-      setIsRunning(false);
-      cleanup();
-      await loadRenders();
-    }
-  };
-
-  const loadRenders = async () => {
-    const existing = await window.electronAPI.listRenders();
-    setRenders(existing);
-  };
-
-  const handleCancelJob = async () => {
-    await window.electronAPI.cancelJob();
-    setIsRunning(false);
-    setProgress({ stage: "warning", message: "Job cancelled." });
-    await loadRenders();
-  };
-
-  const handleUploadExisting = async (render: RenderedVideo) => {
-    setIsRunning(true);
-    setProgress({ stage: "uploading", percent: 0 });
-
-    const cleanup = window.electronAPI.onJobProgress((msg) => {
-      setProgress(msg);
-
-      if (msg.stage === "done" || msg.stage === "warning") {
-        setIsRunning(false);
-        cleanup();
-      }
+  const handleUploadExisting = (render: RenderedVideo) =>
+    uploadExisting({
+      render,
+      thumbnail,
+      title,
+      description,
+      encoder,
+      performanceMode,
+      visibilityStatus,
+      selectedPlaylistIds,
     });
 
-    try {
-      await window.electronAPI.startJob({
-        mode: "upload-existing",
-        clips: [],
-        thumbnail,
-        title,
-        description,
-        output_path: render.path,
-        encoder,
-        performance_mode: performanceMode,
-        visibility: visibilityStatus,
-        playlist_ids: selectedPlaylistIds
-      });
-    } catch (err) {
-      setProgress({ stage: "warning", message: String(err) });
-      setIsRunning(false);
-      cleanup();
-    }
-  };
+
+  const handleCancelJob = () => cancelJob(loadRenders);
 
   const progressLabel = () => {
     if (!progress) return "";
@@ -270,7 +133,7 @@ function App() {
         </div>
 
         <div className="row">
-          <button onClick={handleImportCredentials} disabled={isRunning}>
+          <button onClick={importCredentials} disabled={isRunning}>
             Import credentials
           </button>
 
