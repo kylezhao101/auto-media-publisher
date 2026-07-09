@@ -5,6 +5,7 @@ import type {
     Thumbnail,
 } from "../types/amp";
 import type { Encoder, PerformanceMode, Visibility } from "../vite-env";
+import { desktopNotification } from "../helpers/notifications";
 
 
 type StartJobArgs = {
@@ -41,7 +42,24 @@ export function useJobRunner() {
         const cleanup = window.electronAPI.onJobProgress((msg) => {
             setProgress(msg);
 
-            if (msg.stage === "done" || msg.stage === "warning") {
+            if (msg.stage === "done") {
+                desktopNotification(
+                    "Upload Complete",
+                    msg.video_id
+                        ? `Video uploaded successfully. ID: ${msg.video_id}`
+                        : msg.message ?? "Your video was uploaded successfully."
+                );
+
+                setIsRunning(false);
+                cleanup();
+            }
+
+            if (msg.stage === "warning") {
+                desktopNotification(
+                    "Upload Warning",
+                    msg.message ?? "The job finished with a warning."
+                )
+
                 setIsRunning(false);
                 cleanup();
             }
@@ -62,7 +80,11 @@ export function useJobRunner() {
 
             await args.loadRenders();
         } catch (err) {
-            setProgress({ stage: "warning", message: String(err) });
+            const message = String(err);
+
+            setProgress({ stage: "warning", message });
+            desktopNotification("Job failed", message);
+
             setIsRunning(false);
             cleanup();
             await args.loadRenders();
@@ -96,7 +118,10 @@ export function useJobRunner() {
                 playlist_ids: args.selectedPlaylistIds,
             });
         } catch (err) {
-            setProgress({ stage: "warning", message: String(err) });
+            const message = String(err);
+            setProgress({ stage: "warning", message });
+            desktopNotification("Job failed", message);
+
             setIsRunning(false);
             cleanup();
         }
