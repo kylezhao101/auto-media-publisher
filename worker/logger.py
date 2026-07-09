@@ -5,14 +5,11 @@ import os
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
 
+from app_paths import get_logs_dir
+
 
 def setup_logger(name: str = "worker") -> logging.Logger:
-    default_app_data = Path(os.getenv("APPDATA", ".")) / "AutoMediaPublisher"
-
-    app_data = Path(os.getenv("AMP_APP_DATA_DIR", str(default_app_data)))
-
-    log_dir = app_data / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
+    log_dir = get_logs_dir()
 
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
