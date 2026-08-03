@@ -80,7 +80,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    release-macos:
+  release-macos:
     needs: create-release
     runs-on: macos-latest
 
@@ -153,7 +153,7 @@ jobs:
         run: npx electron-builder --mac --arm64 --publish onTagOrDraft
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Verify packaged macOS binaries
         working-directory: desktop
         shell: bash
