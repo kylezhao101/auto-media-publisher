@@ -107,30 +107,30 @@ jobs:
         run: npm install --no-save ffmpeg-static @derhuerst/ffprobe-static
 
       - name: Stage macOS FFmpeg binaries
-          working-directory: desktop
-          shell: bash
-          run: |
-            set -euxo pipefail
+        working-directory: desktop
+        shell: bash
+        run: |
+          set -euxo pipefail
 
-            mkdir -p ../binaries/ffmpeg/macos-arm64
+          mkdir -p ../binaries/ffmpeg/macos-arm64
 
-            FFMPEG_PATH="$(node -e "console.log(require('ffmpeg-static'))")"
-            FFPROBE_PATH="$(node -e "console.log(require('@derhuerst/ffprobe-static'))")"
+          FFMPEG_PATH="$(node -e "console.log(require('ffmpeg-static'))")"
+          FFPROBE_PATH="$(node -e "console.log(require('@derhuerst/ffprobe-static'))")"
 
-            test -f "$FFMPEG_PATH"
-            test -f "$FFPROBE_PATH"
+          test -f "$FFMPEG_PATH"
+          test -f "$FFPROBE_PATH"
 
-            cp "$FFMPEG_PATH" ../binaries/ffmpeg/macos-arm64/ffmpeg
-            cp "$FFPROBE_PATH" ../binaries/ffmpeg/macos-arm64/ffprobe
+          cp "$FFMPEG_PATH" ../binaries/ffmpeg/macos-arm64/ffmpeg
+          cp "$FFPROBE_PATH" ../binaries/ffmpeg/macos-arm64/ffprobe
 
-            chmod +x ../binaries/ffmpeg/macos-arm64/ffmpeg
-            chmod +x ../binaries/ffmpeg/macos-arm64/ffprobe
+          chmod +x ../binaries/ffmpeg/macos-arm64/ffmpeg
+          chmod +x ../binaries/ffmpeg/macos-arm64/ffprobe
 
-            file ../binaries/ffmpeg/macos-arm64/ffmpeg
-            file ../binaries/ffmpeg/macos-arm64/ffprobe
+          file ../binaries/ffmpeg/macos-arm64/ffmpeg
+          file ../binaries/ffmpeg/macos-arm64/ffprobe
 
-            ../binaries/ffmpeg/macos-arm64/ffmpeg -version
-            ../binaries/ffmpeg/macos-arm64/ffprobe -version
+          ../binaries/ffmpeg/macos-arm64/ffmpeg -version
+          ../binaries/ffmpeg/macos-arm64/ffprobe -version
 
       - name: Install Python dependencies
         working-directory: worker
