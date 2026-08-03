@@ -240,7 +240,7 @@ jobs:
       - name: Show collected release files
         shell: bash
         run: |
-          find artifacts -type f -maxdepth 3 -print
+          find artifacts -maxdepth 3 -type f -print
 
       - name: Upload files to GitHub Release
         shell: bash
@@ -250,6 +250,7 @@ jobs:
           gh release upload "$GITHUB_REF_NAME" \
             artifacts/windows/* \
             artifacts/macos/* \
+            --repo "$GITHUB_REPOSITORY" \
             --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
