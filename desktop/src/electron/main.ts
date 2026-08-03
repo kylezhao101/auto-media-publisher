@@ -57,6 +57,30 @@ function setupAutoUpdater(win: BrowserWindow) {
 
   autoUpdater.autoDownload = false;
 
+  if (isMac) {
+    autoUpdater.on("update-available", async (info) => {
+      const result = await dialog.showMessageBox(win, {
+        type: "info",
+        title: "Update available",
+        message: `Version ${info.version} is available.`,
+        detail:
+          "Automatic updates are not supported on macOS yet.\n\nDownload the latest version from GitHub Releases and replace the application in your Applications folder.",
+        buttons: ["Open Releases", "Later"],
+        defaultId: 0,
+        cancelId: 1,
+      });
+
+      if (result.response === 0) {
+        shell.openExternal(
+          "https://github.com/kylezhao101/auto-media-publisher/releases/latest"
+        );
+      }
+    });
+
+    autoUpdater.checkForUpdates();
+    return;
+  }
+
   autoUpdater.on("update-available", async (info) => {
     const result = await dialog.showMessageBox(win, {
       type: "info",
