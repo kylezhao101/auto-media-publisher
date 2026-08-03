@@ -80,7 +80,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  release-macos:
+    release-macos:
     needs: create-release
     runs-on: macos-latest
 
@@ -101,6 +101,33 @@ jobs:
       - name: Install desktop dependencies
         working-directory: desktop
         run: npm ci
+
+      - name: Install macOS FFmpeg binaries
+        working-directory: desktop
+        run: npm install --no-save ffmpeg-static @derhuerst/ffprobe-static
+
+      - name: Stage macOS FFmpeg binaries
+        working-directory: desktop
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          mkdir -p ../binaries/ffmpeg/macos-arm64
+
+          FFMPEG_PATH="$(node -e "console.log(require('ffmpeg-static'))")"
+          FFPROBE_PATH="$(node -e "console.log(require('@derhuerst/ffprobe-static').path)")"
+
+          cp "$FFMPEG_PATH" ../binaries/ffmpeg/macos-arm64/ffmpeg
+          cp "$FFPROBE_PATH" ../binaries/ffmpeg/macos-arm64/ffprobe
+
+          chmod +x ../binaries/ffmpeg/macos-arm64/ffmpeg
+          chmod +x ../binaries/ffmpeg/macos-arm64/ffprobe
+
+          file ../binaries/ffmpeg/macos-arm64/ffmpeg
+          file ../binaries/ffmpeg/macos-arm64/ffprobe
+
+          ../binaries/ffmpeg/macos-arm64/ffmpeg -version
+          ../binaries/ffmpeg/macos-arm64/ffprobe -version
 
       - name: Install Python dependencies
         working-directory: worker
@@ -123,6 +150,26 @@ jobs:
 
       - name: Build macOS release
         working-directory: desktop
-        run: npx electron-builder --mac --publish onTagOrDraft
+        run: npx electron-builder --mac --arm64 --publish onTagOrDraft
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Verify packaged macOS binaries
+        working-directory: desktop
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          APP="$(find release -type d -name '*.app' | head -n 1)"
+
+          FFMPEG="$APP/Contents/Resources/ffmpeg/ffmpeg"
+          FFPROBE="$APP/Contents/Resources/ffmpeg/ffprobe"
+
+          test -x "$FFMPEG"
+          test -x "$FFPROBE"
+
+          file "$FFMPEG"
+          file "$FFPROBE"
+
+          "$FFMPEG" -version
+          "$FFPROBE" -version

@@ -13,7 +13,7 @@ import {
   getTokenExecutable,
   isMac
 } from "./../helpers/platform.js";
-import { getAppDataDir, getLogDir } from "./../helpers/paths.js";
+import { ensureExecutable, getAppDataDir, getLogDir } from "./../helpers/paths.js";
 import { ChildProcess, spawn } from "child_process";
 
 const { autoUpdater } = updater;
@@ -346,11 +346,23 @@ ipcMain.handle("start-job", async (event, payload) => {
 
   const workerCwd = isDev ? workerDir : packagedWorkerDir;
 
+  const ffmpegPath = isDev
+    ? "ffmpeg"
+    : getPackagedFFmpegPath();
+
+  const ffprobePath = isDev
+    ? "ffprobe"
+    : getPackagedFFprobePath();
+
+  if (!isDev) {
+    ensureExecutable(ffmpegPath);
+    ensureExecutable(ffprobePath);
+  }
+
   const workerEnv = {
     ...getWorkerEnv(),
-
-    FFMPEG_PATH: isDev || isMac ? "ffmpeg" : getPackagedFFmpegPath(),
-    FFPROBE_PATH: isDev || isMac ? "ffprobe" : getPackagedFFprobePath(),
+    FFMPEG_PATH: ffmpegPath,
+    FFPROBE_PATH: ffprobePath,
   };
 
   preparePackagedBinary(workerBin);
@@ -373,8 +385,12 @@ ipcMain.handle("start-job", async (event, payload) => {
     }
   });
 
+  let stderr = "";
+
   child.stderr.on("data", (data: Buffer) => {
-    console.error("[worker]", data.toString());
+    const text = data.toString();
+    stderr += text;
+    console.error("[worker]", text);
   });
 
   return new Promise((resolve, reject) => {
@@ -384,7 +400,7 @@ ipcMain.handle("start-job", async (event, payload) => {
       if (code === 0) {
         resolve({ success: true });
       } else {
-        reject(new Error(`Worker exited with code ${code}`));
+        reject(new Error(stderr || `Worker exited with code ${code}`));
       }
     });
   });

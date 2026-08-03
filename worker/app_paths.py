@@ -9,18 +9,25 @@ APP_NAME = "AutoMediaPublisher"
 
 def get_app_data_dir() -> Path:
     override = os.getenv("AMP_APP_DATA_DIR")
+
     if override:
         app_data = Path(override)
     elif sys.platform == "darwin":
         app_data = Path.home() / "Library" / "Application Support" / APP_NAME
     elif sys.platform == "win32":
-        app_data = (
-            Path(os.getenv("APPDATA", Path.home() / "AppData" / "Roaming")) / APP_NAME
-        )
+        roaming = os.getenv("APPDATA")
+
+        if roaming:
+            app_data = Path(roaming) / APP_NAME
+        else:
+            app_data = Path.home() / "AppData" / "Roaming" / APP_NAME
     else:
-        app_data = (
-            Path(os.getenv("XDG_CONFIG_HOME", Path.home() / ".config")) / APP_NAME
-        )
+        config_home = os.getenv("XDG_CONFIG_HOME")
+
+        if config_home:
+            app_data = Path(config_home) / APP_NAME
+        else:
+            app_data = Path.home() / ".config" / APP_NAME
 
     app_data.mkdir(parents=True, exist_ok=True)
     return app_data

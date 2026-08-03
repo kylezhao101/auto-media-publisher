@@ -2,7 +2,7 @@
   "name": "desktop",
   "private": true,
   "productName": "AutoMediaPublisher",
-  "version": "0.2.12",
+  "version": "0.2.13",
   "type": "module",
   "main": "dist-electron/electron/main.js",
   "scripts": {
@@ -21,7 +21,7 @@
         "releaseType": "draft"
       }
     ],
-    "appId": "org.fcnabc.automediapublisher",
+    "appId": "org.kylezhao101.automediapublisher",
     "productName": "AutoMediaPublisher",
     "directories": {
       "output": "release"
@@ -34,22 +34,58 @@
     "extraResources": [
       {
         "from": "../worker/dist",
-        "to": "worker"
-      },
-      {
-        "from": "../binaries/ffmpeg",
-        "to": "ffmpeg"
+        "to": "worker",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {
-      "target": "nsis"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "extraResources": [
+        {
+          "from": "../binaries/ffmpeg/windows-x64",
+          "to": "ffmpeg",
+          "filter": [
+            "ffmpeg.exe",
+            "ffprobe.exe"
+          ]
+        }
+      ]
     },
     "mac": {
       "target": [
-        "dmg",
-        "zip"
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
       ],
-      "category": "public.app-category.video"
+      "category": "public.app-category.video",
+      "extraResources": [
+        {
+          "from": "../binaries/ffmpeg/macos-arm64",
+          "to": "ffmpeg",
+          "filter": [
+            "ffmpeg",
+            "ffprobe"
+          ]
+        }
+      ]
     }
   },
   "dependencies": {
