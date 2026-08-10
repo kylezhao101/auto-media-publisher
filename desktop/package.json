@@ -49,6 +49,7 @@
           ]
         }
       ],
+      "artifactName": "${productName}-Setup-${version}.${ext}",
       "extraResources": [
         {
           "from": "../binaries/ffmpeg/windows-x64",
@@ -75,6 +76,7 @@
           ]
         }
       ],
+      "artifactName": "${productName}-${version}-${arch}-mac.${ext}",
       "category": "public.app-category.video",
       "extraResources": [
         {
