@@ -227,11 +227,11 @@ ipcMain.handle("get-auth-status", async () => {
 });
 
 ipcMain.handle("connect-to-youtube", async () => {
-  const tokenPath = path.join(getAppDataDir(), "google-token.json");
+  // const tokenPath = path.join(getAppDataDir(), "google-token.json");
 
-  if (fs.existsSync(tokenPath)) {
-    fs.unlinkSync(tokenPath);
-  }
+  // if (fs.existsSync(tokenPath)) {
+  //   fs.unlinkSync(tokenPath);
+  // }
 
   preparePackagedBinary(getTokenBin);
 

@@ -143,6 +143,15 @@ function App() {
           >
             Connect YouTube
           </button>
+
+          <button
+            type="button"
+            onClick={refreshAuthStatus}
+            disabled={isRunning}
+          >
+            Refresh status
+          </button>
+
           <button
             type="button"
             onClick={() => window.electronAPI.openLogsFolder()}
