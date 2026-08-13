@@ -13,7 +13,7 @@ import {
   getTokenExecutable,
   isMac
 } from "./../helpers/platform.js";
-import { getAppDataDir, getLogDir } from "./../helpers/paths.js";
+import { ensureExecutable, getAppDataDir, getLogDir } from "./../helpers/paths.js";
 import { ChildProcess, spawn } from "child_process";
 
 const { autoUpdater } = updater;
@@ -56,6 +56,30 @@ function setupAutoUpdater(win: BrowserWindow) {
   if (isDev) return;
 
   autoUpdater.autoDownload = false;
+
+  if (isMac) {
+    autoUpdater.on("update-available", async (info) => {
+      const result = await dialog.showMessageBox(win, {
+        type: "info",
+        title: "Update available",
+        message: `Version ${info.version} is available.`,
+        detail:
+          "Automatic updates are not supported on macOS yet.\n\nDownload the latest version from GitHub Releases and replace the application in your Applications folder.",
+        buttons: ["Open Releases", "Later"],
+        defaultId: 0,
+        cancelId: 1,
+      });
+
+      if (result.response === 0) {
+        shell.openExternal(
+          "https://github.com/kylezhao101/auto-media-publisher/releases/latest"
+        );
+      }
+    });
+
+    autoUpdater.checkForUpdates();
+    return;
+  }
 
   autoUpdater.on("update-available", async (info) => {
     const result = await dialog.showMessageBox(win, {
@@ -203,11 +227,11 @@ ipcMain.handle("get-auth-status", async () => {
 });
 
 ipcMain.handle("connect-to-youtube", async () => {
-  const tokenPath = path.join(getAppDataDir(), "google-token.json");
+  // const tokenPath = path.join(getAppDataDir(), "google-token.json");
 
-  if (fs.existsSync(tokenPath)) {
-    fs.unlinkSync(tokenPath);
-  }
+  // if (fs.existsSync(tokenPath)) {
+  //   fs.unlinkSync(tokenPath);
+  // }
 
   preparePackagedBinary(getTokenBin);
 
@@ -346,11 +370,23 @@ ipcMain.handle("start-job", async (event, payload) => {
 
   const workerCwd = isDev ? workerDir : packagedWorkerDir;
 
+  const ffmpegPath = isDev
+    ? "ffmpeg"
+    : getPackagedFFmpegPath();
+
+  const ffprobePath = isDev
+    ? "ffprobe"
+    : getPackagedFFprobePath();
+
+  if (!isDev) {
+    ensureExecutable(ffmpegPath);
+    ensureExecutable(ffprobePath);
+  }
+
   const workerEnv = {
     ...getWorkerEnv(),
-
-    FFMPEG_PATH: isDev || isMac ? "ffmpeg" : getPackagedFFmpegPath(),
-    FFPROBE_PATH: isDev || isMac ? "ffprobe" : getPackagedFFprobePath(),
+    FFMPEG_PATH: ffmpegPath,
+    FFPROBE_PATH: ffprobePath,
   };
 
   preparePackagedBinary(workerBin);
@@ -373,8 +409,12 @@ ipcMain.handle("start-job", async (event, payload) => {
     }
   });
 
+  let stderr = "";
+
   child.stderr.on("data", (data: Buffer) => {
-    console.error("[worker]", data.toString());
+    const text = data.toString();
+    stderr += text;
+    console.error("[worker]", text);
   });
 
   return new Promise((resolve, reject) => {
@@ -384,7 +424,7 @@ ipcMain.handle("start-job", async (event, payload) => {
       if (code === 0) {
         resolve({ success: true });
       } else {
-        reject(new Error(`Worker exited with code ${code}`));
+        reject(new Error(stderr || `Worker exited with code ${code}`));
       }
     });
   });

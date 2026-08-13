@@ -3,3 +3,5 @@ desktop/dist-electron/
 worker/build/
 worker/dist/
 worker/*.spec
+
+binaries/ffmpeg/macos-arm64/
