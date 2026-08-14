@@ -12,6 +12,8 @@ from app.services.supabase_service import supabase
 
 from datetime import datetime, timezone
 
+from app.config import FRONTEND_INVITE_URL
+
 organization_router = APIRouter()
 invitation_router = APIRouter()
 
@@ -40,6 +42,22 @@ def create_invitation(
 
     email = payload.email.lower()
 
+    organization_response = (
+        supabase.table("organizations")
+        .select("name")
+        .eq("id", str(organization_id))
+        .single()
+        .execute()
+    )
+
+    if not organization_response.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found",
+        )
+
+    organization_name = organization_response.data["name"]
+
     response = (
         supabase.table("organization_invitations")
         .insert(
@@ -63,7 +81,14 @@ def create_invitation(
 
     supabase.auth.admin.invite_user_by_email(
         email,
-        {"redirect_to": (f"http://localhost:5173/" f"?invite={invitation['token']}")},
+        {
+            "redirect_to": (f"{FRONTEND_INVITE_URL}?invite={invitation['token']}"),
+            "data": {
+                "organization_name": organization_name,
+                "invited_by": user.email,
+                "role": payload.role,
+            },
+        },
     )
 
     return invitation
