@@ -4,6 +4,7 @@ import type { Session } from "@supabase/supabase-js"
 import { supabase } from "@/lib/supabase"
 
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 
 import {
     Card,
@@ -14,6 +15,7 @@ import {
 } from "@/components/ui/card"
 
 import {
+    Building2,
     Check,
     Mail,
 } from "lucide-react"
@@ -21,6 +23,14 @@ import {
 
 const API_URL =
     import.meta.env.VITE_API_URL
+
+
+type InvitationDetails = {
+    organization_name: string
+    email: string
+    role: "admin" | "publisher" | "member"
+    expires_at: string
+}
 
 
 type AcceptedInvitation = {
@@ -32,6 +42,9 @@ type AcceptedInvitation = {
 export function InvitePage() {
     const [session, setSession] =
         useState<Session | null>(null)
+
+    const [invitation, setInvitation] =
+        useState<InvitationDetails | null>(null)
 
     const [loading, setLoading] =
         useState(true)
@@ -55,21 +68,68 @@ export function InvitePage() {
 
 
     useEffect(() => {
-        async function loadSession() {
-            const { data, error } =
-                await supabase.auth.getSession()
-
-            if (error) {
-                setError(error.message)
+        async function initialize() {
+            if (!inviteToken) {
+                setError(
+                    "Invitation token missing.",
+                )
+                setLoading(false)
+                return
             }
 
-            setSession(data.session)
-            setLoading(false)
+            try {
+                const [
+                    sessionResponse,
+                    invitationResponse,
+                ] = await Promise.all([
+                    supabase.auth.getSession(),
+
+                    fetch(
+                        `${API_URL}/invitations/${inviteToken}`,
+                    ),
+                ])
+
+
+                if (sessionResponse.error) {
+                    throw sessionResponse.error
+                }
+
+
+                const invitationData =
+                    await invitationResponse
+                        .json()
+                        .catch(() => null)
+
+
+                if (!invitationResponse.ok) {
+                    throw new Error(
+                        invitationData?.detail ??
+                        "Failed to load invitation.",
+                    )
+                }
+
+
+                setSession(
+                    sessionResponse.data.session,
+                )
+
+                setInvitation(
+                    invitationData,
+                )
+            } catch (error) {
+                setError(
+                    error instanceof Error
+                        ? error.message
+                        : "Failed to load invitation.",
+                )
+            } finally {
+                setLoading(false)
+            }
         }
 
 
-        loadSession()
-    }, [])
+        initialize()
+    }, [inviteToken])
 
 
     async function acceptInvitation() {
@@ -87,10 +147,8 @@ export function InvitePage() {
             return
         }
 
-
         setAccepting(true)
         setError(null)
-
 
         try {
             const response = await fetch(
@@ -105,12 +163,10 @@ export function InvitePage() {
                 },
             )
 
-
             const data =
                 await response
                     .json()
                     .catch(() => null)
-
 
             if (!response.ok) {
                 throw new Error(
@@ -118,7 +174,6 @@ export function InvitePage() {
                     "Failed to accept invitation.",
                 )
             }
-
 
             setAccepted({
                 organization_id:
@@ -147,11 +202,20 @@ export function InvitePage() {
 
 
     if (loading) {
-        return null
+        return (
+            <main className="flex min-h-svh items-center justify-center bg-background p-6">
+                <p className="text-sm text-muted-foreground">
+                    Loading invitation...
+                </p>
+            </main>
+        )
     }
 
 
-    if (!inviteToken) {
+    if (
+        !inviteToken ||
+        !invitation
+    ) {
         return (
             <main className="flex min-h-svh items-center justify-center bg-background p-6">
                 <Card className="w-full max-w-md">
@@ -161,8 +225,8 @@ export function InvitePage() {
                         </CardTitle>
 
                         <CardDescription>
-                            This invitation link is
-                            missing its token.
+                            {error ??
+                                "This invitation could not be loaded."}
                         </CardDescription>
                     </CardHeader>
                 </Card>
@@ -185,8 +249,13 @@ export function InvitePage() {
                         </CardTitle>
 
                         <CardDescription>
-                            You now have access to
-                            the organization as{" "}
+                            You joined{" "}
+                            <span className="font-medium text-foreground">
+                                {
+                                    invitation.organization_name
+                                }
+                            </span>{" "}
+                            as a{" "}
                             <span className="capitalize">
                                 {accepted.role}
                             </span>
@@ -211,26 +280,70 @@ export function InvitePage() {
     }
 
 
+    const signedInEmail =
+        session?.user.email?.toLowerCase()
+
+    const invitedEmail =
+        invitation.email.toLowerCase()
+
+    const emailMatches =
+        signedInEmail === invitedEmail
+
+
     return (
         <main className="flex min-h-svh items-center justify-center bg-background p-6">
             <Card className="w-full max-w-md">
+
                 <CardHeader>
                     <div className="mb-2 flex size-10 items-center justify-center rounded-full bg-muted">
-                        <Mail className="size-5 text-muted-foreground" />
+                        <Building2 className="size-5 text-muted-foreground" />
                     </div>
 
                     <CardTitle>
-                        Organization invitation
+                        Join{" "}
+                        {invitation.organization_name}
                     </CardTitle>
 
                     <CardDescription>
-                        Accept this invitation to
-                        join the organization.
+                        You've been invited to join
+                        this organization on Auto
+                        Media Publisher.
                     </CardDescription>
                 </CardHeader>
 
 
                 <CardContent className="space-y-4">
+
+                    <div className="grid gap-3 rounded-lg border border-border/60 p-4">
+
+                        <div className="flex items-center justify-between gap-4">
+                            <span className="text-sm text-muted-foreground">
+                                Role
+                            </span>
+
+                            <Badge
+                                variant="secondary"
+                                className="capitalize"
+                            >
+                                {invitation.role}
+                            </Badge>
+                        </div>
+
+
+                        <div className="flex items-center justify-between gap-4">
+                            <span className="text-sm text-muted-foreground">
+                                Invited email
+                            </span>
+
+                            <div className="flex items-center gap-1.5 text-sm font-medium">
+                                <Mail className="size-3.5 text-muted-foreground" />
+
+                                {invitation.email}
+                            </div>
+                        </div>
+
+                    </div>
+
 
                     <div className="rounded-lg border border-border/60 p-4">
                         <p className="text-xs text-muted-foreground">
@@ -242,6 +355,18 @@ export function InvitePage() {
                                 "Unknown account"}
                         </p>
                     </div>
+
+
+                    {!emailMatches && (
+                        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+                            <p className="text-sm text-destructive">
+                                This invitation was sent
+                                to {invitation.email}.
+                                Sign in with that account
+                                to accept it.
+                            </p>
+                        </div>
+                    )}
 
 
                     {error && (
@@ -256,7 +381,10 @@ export function InvitePage() {
                         onClick={
                             acceptInvitation
                         }
-                        disabled={accepting}
+                        disabled={
+                            accepting ||
+                            !emailMatches
+                        }
                     >
                         {accepting
                             ? "Accepting..."
