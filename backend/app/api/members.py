@@ -9,7 +9,7 @@ from app.services.organization_service import (
     require_organization_role,
 )
 from app.services.supabase_service import supabase
-from backend.app.api.helpers.member_response import build_member_response
+from app.api.helpers.member_response import build_member_response
 
 router = APIRouter()
 
