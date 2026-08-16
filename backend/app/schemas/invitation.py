@@ -3,8 +3,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr
 
-InviteRole = Literal["admin", "publisher", "member"]
-
 InvitationRole = Literal[
     "admin",
     "publisher",
@@ -21,8 +19,15 @@ class InvitationResponse(BaseModel):
     id: UUID
     organization_id: UUID
     email: EmailStr
-    role: InviteRole
+    role: InvitationRole
     invited_by: UUID
     created_at: str
     expires_at: str
     accepted_at: str | None = None
+
+
+class InvitationDetailsResponse(BaseModel):
+    organization_name: str
+    email: EmailStr
+    role: InvitationRole
+    expires_at: str
