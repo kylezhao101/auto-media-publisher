@@ -53,7 +53,9 @@ def exchange_code_for_credentials(
     return flow.credentials
 
 
-def get_youtube_channel(credentials):
+def get_youtube_channel(
+    credentials,
+) -> dict:
     youtube = build(
         "youtube",
         "v3",
@@ -69,14 +71,37 @@ def get_youtube_channel(credentials):
         .execute()
     )
 
-    if not response.get("items"):
-        raise ValueError("No YouTube channel found")
+    items = response.get(
+        "items",
+        [],
+    )
 
-    channel = response["items"][0]
+    if not items:
+        raise RuntimeError("No YouTube channel found")
+
+    channel = items[0]
+    snippet = channel.get(
+        "snippet",
+        {},
+    )
+
+    thumbnails = snippet.get(
+        "thumbnails",
+        {},
+    )
+
+    thumbnail = (
+        thumbnails.get("high")
+        or thumbnails.get("medium")
+        or thumbnails.get("default")
+        or {}
+    )
 
     return {
         "channel_id": channel["id"],
-        "channel_name": channel["snippet"]["title"],
+        "channel_name": snippet.get("title"),
+        "channel_handle": snippet.get("customUrl"),
+        "channel_thumbnail": thumbnail.get("url"),
     }
 
 
