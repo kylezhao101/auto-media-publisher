@@ -27,6 +27,7 @@ from app.services.organization_service import (
 )
 
 from app.services.supabase_service import supabase
+from app.api.helpers.member_email import get_member_email
 
 organization_router = APIRouter()
 invitation_router = APIRouter()
@@ -55,6 +56,27 @@ def create_invitation(
         )
 
     email = payload.email.strip().lower()
+
+    members_response = (
+        supabase.table("organization_members")
+        .select("user_id")
+        .eq(
+            "organization_id",
+            str(organization_id),
+        )
+        .execute()
+    )
+
+    for member in members_response.data:
+        member_email = get_member_email(
+            member["user_id"],
+        )
+
+        if member_email and member_email.lower() == email:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=("This user is already a member " "of the organization"),
+            )
 
     existing_invitation = (
         supabase.table("organization_invitations")
