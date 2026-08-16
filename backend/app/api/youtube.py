@@ -116,22 +116,27 @@ def disconnect_youtube(
     connection_response = (
         supabase.table("youtube_connections")
         .select("refresh_token_encrypted")
-        .eq("organization_id", str(organization_id))
+        .eq(
+            "organization_id",
+            str(organization_id),
+        )
         .execute()
     )
 
+    # Already disconnected.
     if not connection_response.data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="YouTube connection not found",
-        )
+        return None
 
     encrypted_refresh_token = connection_response.data[0]["refresh_token_encrypted"]
 
-    refresh_token = decrypt_token(encrypted_refresh_token)
+    refresh_token = decrypt_token(
+        encrypted_refresh_token,
+    )
 
     try:
-        revoke_google_token(refresh_token)
+        revoke_google_token(
+            refresh_token,
+        )
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -141,14 +146,19 @@ def disconnect_youtube(
     delete_response = (
         supabase.table("youtube_connections")
         .delete()
-        .eq("organization_id", str(organization_id))
+        .eq(
+            "organization_id",
+            str(organization_id),
+        )
         .execute()
     )
 
     if not delete_response.data:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Google access was revoked, but the connection could not be removed",
+            detail=(
+                "Google access was revoked, " "but the connection could not be removed"
+            ),
         )
 
     return None
