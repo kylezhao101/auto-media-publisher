@@ -1,19 +1,32 @@
+from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    status,
+)
 
 from app.auth import get_current_user
-from app.schemas.invitation import (
-    InvitationCreate,
-    InvitationResponse,
-)
-from app.services.organization_service import require_organization_role
-from app.services.supabase_service import supabase
-
-from datetime import datetime, timezone
 
 from app.config import FRONTEND_INVITE_URL
-from app.services.email_service import send_organization_invitation_email
+
+from app.schemas.invitation import (
+    InvitationCreate,
+    InvitationDetailsResponse,
+    InvitationResponse,
+)
+
+from app.services.email_service import (
+    send_organization_invitation_email,
+)
+
+from app.services.organization_service import (
+    require_organization_role,
+)
+
+from app.services.supabase_service import supabase
 
 organization_router = APIRouter()
 invitation_router = APIRouter()
@@ -35,16 +48,10 @@ def create_invitation(
         {"owner", "admin"},
     )
 
-    if payload.role == "owner":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Ownership cannot be assigned through an invitation",
-        )
-
     if membership["role"] == "admin" and payload.role == "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the organization owner can invite admins",
+            detail=("Only the organization owner " "can invite admins"),
         )
 
     email = payload.email.strip().lower()
@@ -56,15 +63,21 @@ def create_invitation(
             "organization_id",
             str(organization_id),
         )
-        .eq("email", email)
-        .is_("accepted_at", "null")
+        .eq(
+            "email",
+            email,
+        )
+        .is_(
+            "accepted_at",
+            "null",
+        )
         .execute()
     )
 
     if existing_invitation.data:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="This email already has a pending invitation",
+            detail=("This email already has " "a pending invitation"),
         )
 
     organization_response = (
@@ -101,7 +114,7 @@ def create_invitation(
 
     if not response.data:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=(status.HTTP_500_INTERNAL_SERVER_ERROR),
             detail="Failed to create invitation",
         )
 
@@ -153,8 +166,14 @@ def list_invitations(
     response = (
         supabase.table("organization_invitations")
         .select("*")
-        .eq("organization_id", str(organization_id))
-        .is_("accepted_at", "null")
+        .eq(
+            "organization_id",
+            str(organization_id),
+        )
+        .is_(
+            "accepted_at",
+            "null",
+        )
         .order("created_at")
         .execute()
     )
@@ -180,9 +199,18 @@ def revoke_invitation(
     response = (
         supabase.table("organization_invitations")
         .delete()
-        .eq("id", str(invitation_id))
-        .eq("organization_id", str(organization_id))
-        .is_("accepted_at", "null")
+        .eq(
+            "id",
+            str(invitation_id),
+        )
+        .eq(
+            "organization_id",
+            str(organization_id),
+        )
+        .is_(
+            "accepted_at",
+            "null",
+        )
         .execute()
     )
 
@@ -193,6 +221,75 @@ def revoke_invitation(
         )
 
     return None
+
+
+@invitation_router.get(
+    "/{token}",
+    response_model=InvitationDetailsResponse,
+)
+def get_invitation(
+    token: UUID,
+):
+    response = (
+        supabase.table("organization_invitations")
+        .select("organization_id, email, role, " "expires_at, accepted_at")
+        .eq(
+            "token",
+            str(token),
+        )
+        .execute()
+    )
+
+    if not response.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invitation not found",
+        )
+
+    invitation = response.data[0]
+
+    if invitation["accepted_at"]:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail=("This invitation has already " "been accepted"),
+        )
+
+    expires_at = datetime.fromisoformat(
+        invitation["expires_at"].replace(
+            "Z",
+            "+00:00",
+        )
+    )
+
+    if expires_at < datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Invitation has expired",
+        )
+
+    organization_response = (
+        supabase.table("organizations")
+        .select("name")
+        .eq(
+            "id",
+            invitation["organization_id"],
+        )
+        .single()
+        .execute()
+    )
+
+    if not organization_response.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found",
+        )
+
+    return {
+        "organization_name": (organization_response.data["name"]),
+        "email": invitation["email"],
+        "role": invitation["role"],
+        "expires_at": invitation["expires_at"],
+    }
 
 
 @invitation_router.post(
@@ -206,8 +303,14 @@ def accept_invitation(
     response = (
         supabase.table("organization_invitations")
         .select("*")
-        .eq("token", str(token))
-        .is_("accepted_at", "null")
+        .eq(
+            "token",
+            str(token),
+        )
+        .is_(
+            "accepted_at",
+            "null",
+        )
         .execute()
     )
 
@@ -222,16 +325,21 @@ def accept_invitation(
     if not user.email:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User does not have an email address",
+            detail=("User does not have an " "email address"),
         )
 
     if user.email.lower() != invitation["email"].lower():
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="This invitation belongs to another email address",
+            detail=("This invitation belongs to " "another email address"),
         )
 
-    expires_at = datetime.fromisoformat(invitation["expires_at"].replace("Z", "+00:00"))
+    expires_at = datetime.fromisoformat(
+        invitation["expires_at"].replace(
+            "Z",
+            "+00:00",
+        )
+    )
 
     if expires_at < datetime.now(timezone.utc):
         raise HTTPException(
@@ -239,11 +347,31 @@ def accept_invitation(
             detail="Invitation has expired",
         )
 
+    existing_membership = (
+        supabase.table("organization_members")
+        .select("user_id")
+        .eq(
+            "organization_id",
+            invitation["organization_id"],
+        )
+        .eq(
+            "user_id",
+            str(user.id),
+        )
+        .execute()
+    )
+
+    if existing_membership.data:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=("You are already a member " "of this organization"),
+        )
+
     membership_response = (
         supabase.table("organization_members")
         .insert(
             {
-                "organization_id": invitation["organization_id"],
+                "organization_id": (invitation["organization_id"]),
                 "user_id": str(user.id),
                 "role": invitation["role"],
             }
@@ -253,28 +381,35 @@ def accept_invitation(
 
     if not membership_response.data:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create organization membership",
+            status_code=(status.HTTP_500_INTERNAL_SERVER_ERROR),
+            detail=("Failed to create " "organization membership"),
         )
 
     accept_response = (
         supabase.table("organization_invitations")
         .update(
             {
-                "accepted_at": datetime.now(timezone.utc).isoformat(),
+                "accepted_at": (
+                    datetime.now(
+                        timezone.utc,
+                    ).isoformat()
+                ),
             }
         )
-        .eq("id", invitation["id"])
+        .eq(
+            "id",
+            invitation["id"],
+        )
         .execute()
     )
 
     if not accept_response.data:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to mark invitation as accepted",
+            status_code=(status.HTTP_500_INTERNAL_SERVER_ERROR),
+            detail=("Failed to mark invitation " "as accepted"),
         )
 
     return {
-        "organization_id": invitation["organization_id"],
+        "organization_id": (invitation["organization_id"]),
         "role": invitation["role"],
     }
