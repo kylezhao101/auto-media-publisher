@@ -1,5 +1,5 @@
 from fastapi import HTTPException, status
-import supabase
+from app.services.supabase_service import supabase
 
 
 def build_member_response(membership: dict) -> dict:
