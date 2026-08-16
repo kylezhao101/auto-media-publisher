@@ -195,7 +195,9 @@ export function InvitePage() {
 
 
     async function signOut() {
-        await supabase.auth.signOut()
+        await supabase.auth.signOut({
+            scope: "local",
+        })
 
         window.location.reload()
     }

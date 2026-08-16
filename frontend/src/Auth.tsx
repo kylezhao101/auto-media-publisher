@@ -300,26 +300,21 @@ export function Auth({
     async function signInWithGoogle() {
         clearFeedback()
 
-        // Preserve the current route and query string.
-        //
-        // Example:
-        // /invite?invite=abc123
-        //      ↓ Google
-        // /invite?invite=abc123
         const redirectUrl =
             window.location.href
-
 
         const { error } =
             await supabase.auth.signInWithOAuth({
                 provider: "google",
 
                 options: {
-                    redirectTo:
-                        redirectUrl,
+                    redirectTo: redirectUrl,
+
+                    queryParams: {
+                        prompt: "select_account",
+                    },
                 },
             })
-
 
         if (error) {
             setError(error.message)
