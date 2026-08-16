@@ -13,6 +13,7 @@ from app.services.supabase_service import supabase
 from datetime import datetime, timezone
 
 from app.config import FRONTEND_INVITE_URL
+from app.services.email_service import send_organization_invitation_email
 
 organization_router = APIRouter()
 invitation_router = APIRouter()
@@ -46,12 +47,15 @@ def create_invitation(
             detail="Only the organization owner can invite admins",
         )
 
-    email = payload.email.lower()
+    email = payload.email.strip().lower()
 
     existing_invitation = (
         supabase.table("organization_invitations")
         .select("id")
-        .eq("organization_id", str(organization_id))
+        .eq(
+            "organization_id",
+            str(organization_id),
+        )
         .eq("email", email)
         .is_("accepted_at", "null")
         .execute()
@@ -66,7 +70,10 @@ def create_invitation(
     organization_response = (
         supabase.table("organizations")
         .select("name")
-        .eq("id", str(organization_id))
+        .eq(
+            "id",
+            str(organization_id),
+        )
         .single()
         .execute()
     )
@@ -100,32 +107,31 @@ def create_invitation(
 
     invitation = response.data[0]
 
+    invite_url = f"{FRONTEND_INVITE_URL}" f"?invite={invitation['token']}"
+
     try:
-        supabase.auth.admin.invite_user_by_email(
-            email,
-            {
-                "redirect_to": (
-                    f"{FRONTEND_INVITE_URL}" f"?invite={invitation['token']}"
-                ),
-                "data": {
-                    "organization_name": organization_name,
-                    "invited_by": user.email,
-                    "role": payload.role,
-                },
-            },
+        send_organization_invitation_email(
+            to=email,
+            organization_name=organization_name,
+            invited_by=user.email,
+            role=payload.role,
+            invite_url=invite_url,
         )
-    except Exception:
+    except Exception as exc:
         (
             supabase.table("organization_invitations")
             .delete()
-            .eq("id", invitation["id"])
+            .eq(
+                "id",
+                invitation["id"],
+            )
             .execute()
         )
 
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to send invitation email",
-        )
+        ) from exc
 
     return invitation
 
