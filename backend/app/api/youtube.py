@@ -36,10 +36,19 @@ def get_youtube_connection(
     response = (
         supabase.table("youtube_connections")
         .select(
-            "organization_id, channel_id, channel_name, "
-            "connected_by, created_at, updated_at"
+            "organization_id, "
+            "channel_id, "
+            "channel_name, "
+            "channel_handle, "
+            "channel_thumbnail, "
+            "connected_by, "
+            "created_at, "
+            "updated_at"
         )
-        .eq("organization_id", str(organization_id))
+        .eq(
+            "organization_id",
+            str(organization_id),
+        )
         .execute()
     )
 
@@ -178,6 +187,8 @@ def youtube_oauth_callback(
                 "organization_id": organization_id,
                 "channel_id": channel["channel_id"],
                 "channel_name": channel["channel_name"],
+                "channel_handle": channel.get("channel_handle"),
+                "channel_thumbnail": channel.get("channel_thumbnail"),
                 "refresh_token_encrypted": encrypted_refresh_token,
                 "scopes": list(credentials.scopes or []),
                 "connected_by": user_id,
@@ -197,4 +208,6 @@ def youtube_oauth_callback(
         "connected": True,
         "channel_id": channel["channel_id"],
         "channel_name": channel["channel_name"],
+        "channel_handle": channel.get("channel_handle"),
+        "channel_thumbnail": channel.get("channel_thumbnail"),
     }
