@@ -34,6 +34,12 @@ def create_invitation(
         {"owner", "admin"},
     )
 
+    if payload.role == "owner":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ownership cannot be assigned through an invitation",
+        )
+
     if membership["role"] == "admin" and payload.role == "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -41,6 +47,21 @@ def create_invitation(
         )
 
     email = payload.email.lower()
+
+    existing_invitation = (
+        supabase.table("organization_invitations")
+        .select("id")
+        .eq("organization_id", str(organization_id))
+        .eq("email", email)
+        .is_("accepted_at", "null")
+        .execute()
+    )
+
+    if existing_invitation.data:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This email already has a pending invitation",
+        )
 
     organization_response = (
         supabase.table("organizations")
@@ -79,17 +100,32 @@ def create_invitation(
 
     invitation = response.data[0]
 
-    supabase.auth.admin.invite_user_by_email(
-        email,
-        {
-            "redirect_to": (f"{FRONTEND_INVITE_URL}?invite={invitation['token']}"),
-            "data": {
-                "organization_name": organization_name,
-                "invited_by": user.email,
-                "role": payload.role,
+    try:
+        supabase.auth.admin.invite_user_by_email(
+            email,
+            {
+                "redirect_to": (
+                    f"{FRONTEND_INVITE_URL}" f"?invite={invitation['token']}"
+                ),
+                "data": {
+                    "organization_name": organization_name,
+                    "invited_by": user.email,
+                    "role": payload.role,
+                },
             },
-        },
-    )
+        )
+    except Exception:
+        (
+            supabase.table("organization_invitations")
+            .delete()
+            .eq("id", invitation["id"])
+            .execute()
+        )
+
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to send invitation email",
+        )
 
     return invitation
 

@@ -5,10 +5,16 @@ from pydantic import BaseModel, EmailStr
 
 InviteRole = Literal["admin", "publisher", "member"]
 
+InvitationRole = Literal[
+    "admin",
+    "publisher",
+    "member",
+]
+
 
 class InvitationCreate(BaseModel):
     email: EmailStr
-    role: InviteRole = "member"
+    role: InvitationRole
 
 
 class InvitationResponse(BaseModel):

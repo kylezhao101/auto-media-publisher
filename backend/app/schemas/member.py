@@ -12,5 +12,8 @@ class MemberRoleUpdate(BaseModel):
 
 class MemberResponse(BaseModel):
     user_id: UUID
+    email: str
+    display_name: str | None = None
+    avatar_url: str | None = None
     role: OrganizationRole
     created_at: str

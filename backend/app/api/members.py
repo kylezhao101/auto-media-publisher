@@ -9,6 +9,7 @@ from app.services.organization_service import (
     require_organization_role,
 )
 from app.services.supabase_service import supabase
+from backend.app.api.helpers.member_response import build_member_response
 
 router = APIRouter()
 
@@ -29,12 +30,15 @@ def list_members(
     response = (
         supabase.table("organization_members")
         .select("user_id, role, created_at")
-        .eq("organization_id", str(organization_id))
+        .eq(
+            "organization_id",
+            str(organization_id),
+        )
         .order("created_at")
         .execute()
     )
 
-    return response.data
+    return [build_member_response(membership) for membership in response.data]
 
 
 @router.patch(
@@ -104,7 +108,7 @@ def update_member_role(
             detail="Member not found",
         )
 
-    return response.data[0]
+    return build_member_response(response.data[0])
 
 
 @router.delete(
@@ -154,6 +158,48 @@ def remove_member(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Member not found",
+        )
+
+    return None
+
+
+@router.delete(
+    "/me",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def leave_organization(
+    organization_id: UUID,
+    user=Depends(get_current_user),
+):
+    membership = get_organization_membership(
+        organization_id,
+        user.id,
+    )
+
+    if membership["role"] == "owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The organization owner cannot leave the organization",
+        )
+
+    response = (
+        supabase.table("organization_members")
+        .delete()
+        .eq(
+            "organization_id",
+            str(organization_id),
+        )
+        .eq(
+            "user_id",
+            str(user.id),
+        )
+        .execute()
+    )
+
+    if not response.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Membership not found",
         )
 
     return None
