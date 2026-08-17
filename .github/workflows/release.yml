@@ -39,6 +39,9 @@ jobs:
   release-windows:
     needs: create-release
     runs-on: windows-latest
+    environment:
+      name: production
+      deployment: false
 
     steps:
       - name: Checkout repo
@@ -77,6 +80,10 @@ jobs:
 
       - name: Build desktop
         working-directory: desktop
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_KEY: ${{ vars.VITE_SUPABASE_KEY }}
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
         run: npm run build
 
       - name: Build Windows release
@@ -96,6 +103,9 @@ jobs:
   release-macos:
     needs: create-release
     runs-on: macos-latest
+    environment:
+      name: production
+      deployment: false
 
     steps:
       - name: Checkout repo
@@ -167,6 +177,10 @@ jobs:
 
       - name: Build desktop
         working-directory: desktop
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_KEY: ${{ vars.VITE_SUPABASE_KEY }}
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
         run: npm run build
 
       - name: Build macOS release
