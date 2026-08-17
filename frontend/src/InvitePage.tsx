@@ -24,6 +24,8 @@ import {
 const API_URL =
     import.meta.env.VITE_API_URL
 
+const DESKTOP_DOWNLOAD_URL =
+    import.meta.env.VITE_DESKTOP_DOWNLOAD_URL
 
 type InvitationDetails = {
     organization_name: string
@@ -253,19 +255,28 @@ export function InvitePage() {
                         <CardDescription>
                             You joined{" "}
                             <span className="font-medium text-foreground">
-                                {
-                                    invitation.organization_name
-                                }
+                                {invitation.organization_name}
                             </span>{" "}
                             as a{" "}
                             <span className="capitalize">
                                 {accepted.role}
                             </span>
-                            .
+                            . Download Auto Media Publisher to
+                            access the organization and start
+                            publishing.
                         </CardDescription>
                     </CardHeader>
 
                     <CardContent>
+                        <Button
+                            className="w-full"
+                            onClick={() => {
+                                window.location.href =
+                                    "YOUR_DOWNLOAD_URL"
+                            }}
+                        >
+                            Download Auto Media Publisher
+                        </Button>
                         <Button
                             className="w-full"
                             onClick={() => {
