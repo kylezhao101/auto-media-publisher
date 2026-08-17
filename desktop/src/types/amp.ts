@@ -17,9 +17,13 @@ export type RenderedVideo = {
 };
 
 export type AuthStatus = {
-    credentials: boolean;
-    token: boolean;
-};
+    credentials: boolean
+    token: boolean
+    channelId?: string
+    channelName?: string
+    channelHandle?: string
+    channelThumbnail?: string
+}
 
 export type Playlist = {
     id: string;
@@ -35,3 +39,27 @@ export type Thumbnail = {
     path: string;
     preview: string;
 }
+
+export type Clip = {
+    path: string
+    name: string
+    size: number
+    duration: number
+}
+
+export type YouTubeConnectionInfo = {
+    connected: boolean
+    channelId?: string
+    channelName?: string
+    channelHandle?: string
+    channelThumbnail?: string
+}
+
+export type YouTubeAuth =
+    | {
+        type: "local"
+    }
+    | {
+        type: "access_token"
+        access_token: string
+    }

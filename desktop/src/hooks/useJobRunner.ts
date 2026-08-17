@@ -3,33 +3,37 @@ import type {
     JobProgress,
     RenderedVideo,
     Thumbnail,
-} from "../types/amp";
+    YouTubeAuth,
+} from "../types/amp"
 import type { Encoder, PerformanceMode, Visibility } from "../vite-env";
 import { desktopNotification } from "../helpers/notifications";
 
 
 type StartJobArgs = {
-    videos: string[];
-    thumbnail: Thumbnail | null;
-    title: string;
-    description: string;
-    encoder: Encoder;
-    performanceMode: PerformanceMode;
-    visibilityStatus: Visibility;
-    selectedPlaylistIds: string[];
-    loadRenders: () => Promise<void>;
-};
+    videos: string[]
+    thumbnail: Thumbnail | null
+    title: string
+    description: string
+    encoder: Encoder
+    performanceMode: PerformanceMode
+    visibilityStatus: Visibility
+    selectedPlaylistIds: string[]
+    youtubeAuth: YouTubeAuth
+    loadRenders: () => Promise<void>
+}
+
 
 type UploadExistingArgs = {
-    render: RenderedVideo;
-    thumbnail: Thumbnail | null;
-    title: string;
-    description: string;
-    encoder: Encoder;
-    performanceMode: PerformanceMode;
-    visibilityStatus: Visibility;
-    selectedPlaylistIds: string[];
-};
+    render: RenderedVideo
+    thumbnail: Thumbnail | null
+    title: string
+    description: string
+    encoder: Encoder
+    performanceMode: PerformanceMode
+    visibilityStatus: Visibility
+    selectedPlaylistIds: string[]
+    youtubeAuth: YouTubeAuth
+}
 
 export function useJobRunner() {
     const [progress, setProgress] = useState<JobProgress | null>(null);
@@ -76,6 +80,8 @@ export function useJobRunner() {
                 performance_mode: args.performanceMode,
                 visibility: args.visibilityStatus,
                 playlist_ids: args.selectedPlaylistIds,
+
+                youtube_auth: args.youtubeAuth
             });
 
             await args.loadRenders();
@@ -116,6 +122,8 @@ export function useJobRunner() {
                 performance_mode: args.performanceMode,
                 visibility: args.visibilityStatus,
                 playlist_ids: args.selectedPlaylistIds,
+
+                youtube_auth: args.youtubeAuth
             });
         } catch (err) {
             const message = String(err);

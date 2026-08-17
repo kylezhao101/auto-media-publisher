@@ -8,7 +8,7 @@ export function useAuthStatus() {
     });
 
     const refreshAuthStatus = async () => {
-        const result = await window.electronAPI.getAuthStatus();
+        const result = await window.electronAPI.getGCPAuthStatus();
         setAuthStatus(result);
     };
 

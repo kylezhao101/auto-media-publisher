@@ -16,6 +16,43 @@ import {
 import { ensureExecutable, getAppDataDir, getLogDir } from "./../helpers/paths.js";
 import { ChildProcess, spawn } from "child_process";
 
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient(
+      "amp",
+      process.execPath,
+      [path.resolve(process.argv[1])]
+    )
+  }
+} else {
+  app.setAsDefaultProtocolClient("amp")
+}
+
+app.on("second-instance", (_event, argv) => {
+  console.log("SECOND INSTANCE ARGV:", argv)
+
+  const url = argv.find((arg) =>
+    arg.startsWith("amp://")
+  )
+
+  console.log("DEEP LINK:", url)
+
+  if (url) {
+    mainWindow?.webContents.send(
+      "auth-callback",
+      url
+    )
+  }
+
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore()
+    }
+
+    mainWindow.focus()
+  }
+})
+
 const { autoUpdater } = updater;
 
 const __filename = fileURLToPath(import.meta.url);
@@ -49,6 +86,7 @@ const getTokenArgs = isDev
   : [];
 
 let currentJob: ChildProcess | null = null;
+let mainWindow: BrowserWindow | null = null;
 
 const getWindowTitle = () => `Auto Media Publisher v${app.getVersion()}`;
 
@@ -136,7 +174,7 @@ function setupAutoUpdater(win: BrowserWindow) {
 }
 
 function createWindow() {
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1100,
     height: 750,
     title: getWindowTitle(),
@@ -147,25 +185,78 @@ function createWindow() {
     },
   });
 
-  win.on("page-title-updated", (event) => {
+  mainWindow.on("page-title-updated", (event) => {
     event.preventDefault();
-    win.setTitle(getWindowTitle());
+    mainWindow?.setTitle(getWindowTitle());
   });
 
   if (isDev) {
-    win.loadURL("http://localhost:5173");
+    mainWindow.loadURL("http://localhost:5173");
   } else {
-    win.loadFile(path.join(__dirname, "../../dist/index.html"));
+    mainWindow.loadFile(
+      path.join(__dirname, "../../dist/index.html")
+    );
   }
 
-  win.webContents.on("did-finish-load", () => {
-    win.setTitle(getWindowTitle());
+  mainWindow.webContents.on("did-finish-load", () => {
+    mainWindow?.setTitle(getWindowTitle());
   });
 
-  setupAutoUpdater(win);
+  setupAutoUpdater(mainWindow);
+
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
 }
 
-app.whenReady().then(createWindow);
+const gotLock = app.requestSingleInstanceLock();
+
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on("second-instance", (_event, argv) => {
+    const url = argv.find((arg) =>
+      arg.startsWith("amp://")
+    );
+
+    if (url) {
+      mainWindow?.webContents.send(
+        "auth-callback",
+        url
+      );
+    }
+
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+      }
+
+      mainWindow.focus();
+    }
+  });
+}
+
+app.whenReady().then(() => {
+  createWindow()
+
+  const url = process.argv.find((arg) =>
+    arg.startsWith("amp://")
+  )
+
+  if (url) {
+    console.log("COLD START DEEP LINK:", url)
+
+    mainWindow?.webContents.once(
+      "did-finish-load",
+      () => {
+        mainWindow?.webContents.send(
+          "auth-callback",
+          url
+        )
+      }
+    )
+  }
+})
 
 function getWorkerEnv() {
   return {
@@ -282,6 +373,87 @@ ipcMain.handle("select-thumbnail", async () => {
   };
 });
 
+ipcMain.handle(
+  "get-youtube-channel",
+  async () => {
+    const workerCwd =
+      isDev
+        ? workerDir
+        : packagedWorkerDir;
+
+    preparePackagedBinary(
+      workerBin,
+    );
+
+    const child = spawn(
+      workerBin,
+      workerArgs,
+      {
+        cwd: workerCwd,
+        env: getWorkerEnv(),
+      },
+    );
+
+    child.stdin.write(
+      JSON.stringify({
+        mode: "get-channel",
+      }),
+    );
+
+    child.stdin.end();
+
+
+    return new Promise(
+      (resolve, reject) => {
+        let output = "";
+        let errorOutput = "";
+
+        child.stdout.on(
+          "data",
+          (data: Buffer) => {
+            output += data.toString();
+          },
+        );
+
+        child.stderr.on(
+          "data",
+          (data: Buffer) => {
+            errorOutput += data.toString();
+          },
+        );
+
+        child.on(
+          "close",
+          (code) => {
+            if (code !== 0) {
+              reject(
+                new Error(
+                  errorOutput ||
+                  "Failed to load YouTube channel",
+                ),
+              );
+
+              return;
+            }
+
+            try {
+              resolve(
+                JSON.parse(output),
+              );
+            } catch {
+              reject(
+                new Error(
+                  "YouTube channel response was not valid JSON",
+                ),
+              );
+            }
+          },
+        );
+      },
+    );
+  },
+);
+
 ipcMain.handle("list-playlists", async () => {
   const workerCwd = isDev ? workerDir : packagedWorkerDir;
 
@@ -326,109 +498,257 @@ ipcMain.handle("list-playlists", async () => {
   });
 });
 
-ipcMain.handle("start-job", async (event, payload) => {
-  const {
-    clips,
-    thumbnail,
-    title,
-    description,
-    mode,
-    encoder,
-    performance_mode,
-    visibility,
-    playlist_ids
-  } = payload;
+ipcMain.handle(
+  "start-job",
+  async (event, payload) => {
+    const {
+      clips,
+      thumbnail,
+      title,
+      description,
+      mode,
+      encoder,
+      performance_mode,
+      visibility,
+      playlist_ids,
+      youtube_auth,
+    } = payload;
 
-  const tokenPath = path.join(getAppDataDir(), "google-token.json");
 
-  if (!fs.existsSync(tokenPath)) {
-    throw new Error("YouTube is not connected. Please connect YouTube first.");
-  }
+    const youtubeAuth =
+      youtube_auth ?? {
+        type: "local",
+      };
 
-  const outputDir = path.join(app.getPath("videos"), "Auto Media Publisher");
-  fs.mkdirSync(outputDir, { recursive: true });
 
-  const safeTitle = title.replace(/[<>:"/\\|?*]/g, "").slice(0, 80);
+    /*
+     * Personal publishing still uses the
+     * existing local Google token.
+     */
+    if (youtubeAuth.type === "local") {
+      const tokenPath = path.join(
+        getAppDataDir(),
+        "google-token.json",
+      );
 
-  const outputPath =
-    mode === "upload-existing"
-      ? payload.output_path
-      : path.join(outputDir, `${safeTitle}_${Date.now()}.mp4`);
-
-  const job = JSON.stringify({
-    mode: mode ?? "render-and-upload",
-    clips,
-    thumbnail: thumbnail?.path ?? null,
-    title,
-    description,
-    output_path: outputPath,
-    encoder,
-    performance_mode,
-    visibility,
-    playlist_ids
-  });
-
-  const workerCwd = isDev ? workerDir : packagedWorkerDir;
-
-  const ffmpegPath = isDev
-    ? "ffmpeg"
-    : getPackagedFFmpegPath();
-
-  const ffprobePath = isDev
-    ? "ffprobe"
-    : getPackagedFFprobePath();
-
-  if (!isDev) {
-    ensureExecutable(ffmpegPath);
-    ensureExecutable(ffprobePath);
-  }
-
-  const workerEnv = {
-    ...getWorkerEnv(),
-    FFMPEG_PATH: ffmpegPath,
-    FFPROBE_PATH: ffprobePath,
-  };
-
-  preparePackagedBinary(workerBin);
-
-  const child = spawn(workerBin, workerArgs, {
-    cwd: workerCwd,
-    env: workerEnv,
-  });
-
-  currentJob = child;
-
-  child.stdin.write(job);
-  child.stdin.end();
-
-  child.stdout.on("data", (data: Buffer) => {
-    for (const line of data.toString().trim().split("\n")) {
-      try {
-        event.sender.send("job-progress", JSON.parse(line));
-      } catch { }
-    }
-  });
-
-  let stderr = "";
-
-  child.stderr.on("data", (data: Buffer) => {
-    const text = data.toString();
-    stderr += text;
-    console.error("[worker]", text);
-  });
-
-  return new Promise((resolve, reject) => {
-    child.on("close", (code) => {
-      currentJob = null;
-
-      if (code === 0) {
-        resolve({ success: true });
-      } else {
-        reject(new Error(stderr || `Worker exited with code ${code}`));
+      if (!fs.existsSync(tokenPath)) {
+        throw new Error(
+          "YouTube is not connected. Please connect YouTube first."
+        );
       }
+    }
+
+
+    /*
+     * Organization publishing receives only
+     * a short-lived Google access token.
+     */
+    if (
+      youtubeAuth.type === "access_token" &&
+      !youtubeAuth.access_token
+    ) {
+      throw new Error(
+        "Organization YouTube access token is missing."
+      );
+    }
+
+
+    const outputDir = path.join(
+      app.getPath("videos"),
+      "Auto Media Publisher",
+    );
+
+    fs.mkdirSync(
+      outputDir,
+      {
+        recursive: true,
+      },
+    );
+
+
+    const safeTitle = title
+      .replace(
+        /[<>:"/\\|?*]/g,
+        "",
+      )
+      .slice(
+        0,
+        80,
+      );
+
+
+    const outputPath =
+      mode === "upload-existing"
+        ? payload.output_path
+        : path.join(
+          outputDir,
+          `${safeTitle}_${Date.now()}.mp4`,
+        );
+
+
+    const job = JSON.stringify({
+      mode:
+        mode ??
+        "render-and-upload",
+
+      clips,
+
+      thumbnail:
+        thumbnail?.path ??
+        null,
+
+      title,
+      description,
+
+      output_path:
+        outputPath,
+
+      encoder,
+
+      performance_mode,
+
+      visibility,
+
+      playlist_ids,
+
+      youtube_auth:
+        youtubeAuth,
     });
-  });
-});
+
+
+    const workerCwd =
+      isDev
+        ? workerDir
+        : packagedWorkerDir;
+
+
+    const ffmpegPath =
+      isDev
+        ? "ffmpeg"
+        : getPackagedFFmpegPath();
+
+
+    const ffprobePath =
+      isDev
+        ? "ffprobe"
+        : getPackagedFFprobePath();
+
+
+    if (!isDev) {
+      ensureExecutable(
+        ffmpegPath,
+      );
+
+      ensureExecutable(
+        ffprobePath,
+      );
+    }
+
+
+    const workerEnv = {
+      ...getWorkerEnv(),
+
+      FFMPEG_PATH:
+        ffmpegPath,
+
+      FFPROBE_PATH:
+        ffprobePath,
+    };
+
+
+    preparePackagedBinary(
+      workerBin,
+    );
+
+
+    const child = spawn(
+      workerBin,
+      workerArgs,
+      {
+        cwd:
+          workerCwd,
+
+        env:
+          workerEnv,
+      },
+    );
+
+
+    currentJob = child;
+
+
+    child.stdin.write(
+      job,
+    );
+
+    child.stdin.end();
+
+
+    child.stdout.on(
+      "data",
+      (data: Buffer) => {
+        for (
+          const line of
+          data
+            .toString()
+            .trim()
+            .split("\n")
+        ) {
+          try {
+            event.sender.send(
+              "job-progress",
+              JSON.parse(line),
+            );
+          } catch { }
+        }
+      },
+    );
+
+
+    let stderr = "";
+
+
+    child.stderr.on(
+      "data",
+      (data: Buffer) => {
+        const text =
+          data.toString();
+
+        stderr += text;
+
+        console.error(
+          "[worker]",
+          text,
+        );
+      },
+    );
+
+
+    return new Promise(
+      (resolve, reject) => {
+        child.on(
+          "close",
+          (code) => {
+            currentJob = null;
+
+            if (code === 0) {
+              resolve({
+                success: true,
+              });
+            } else {
+              reject(
+                new Error(
+                  stderr ||
+                  `Worker exited with code ${code}`,
+                ),
+              );
+            }
+          },
+        );
+      },
+    );
+  },
+);
 
 ipcMain.handle("list-renders", async () => {
   const outputDir = path.join(app.getPath("videos"), "Auto Media Publisher");
@@ -463,6 +783,10 @@ ipcMain.handle("cancel-job", async () => {
 ipcMain.handle("show-in-folder", async (_event, filePath: string) => {
   shell.showItemInFolder(filePath);
 });
+
+ipcMain.handle("open-external", async (_event, url: string) => {
+  await shell.openExternal(url)
+})
 
 app.on("before-quit", () => {
   if (currentJob) {

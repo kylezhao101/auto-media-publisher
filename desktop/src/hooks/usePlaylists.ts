@@ -1,55 +1,122 @@
-import { useEffect, useState } from "react";
-import type { AuthStatus, Playlist, PlaylistOption } from "../types/amp";
-import type { JobProgress } from "../types/amp";
+import {
+    useEffect,
+    useState,
+} from "react"
+
+import type {
+    JobProgress,
+    Playlist,
+    PlaylistOption,
+} from "../types/amp"
+
 
 type UsePlaylistsArgs = {
-    authStatus: AuthStatus;
-    setProgress: (progress: JobProgress) => void;
-};
+    enabled: boolean
+    sourceKey: string
 
-export function usePlaylists({ authStatus, setProgress }: UsePlaylistsArgs) {
-    const [playlists, setPlaylists] = useState<Playlist[]>([]);
-    const [selectedPlaylistIds, setSelectedPlaylistIds] = useState<string[]>([]);
-    const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(false);
+    fetchPlaylists: () =>
+        Promise<Playlist[]>
 
-    const playlistOptions: PlaylistOption[] = playlists.map((playlist) => ({
-        value: playlist.id,
-        label: playlist.title,
-    }));
+    setProgress: (
+        progress: JobProgress,
+    ) => void
+}
 
-    const loadPlaylists = async () => {
-        if (!authStatus.token) return;
 
-        setIsLoadingPlaylists(true);
+export function usePlaylists({
+    enabled,
+    sourceKey,
+    fetchPlaylists,
+    setProgress,
+}: UsePlaylistsArgs) {
+    const [playlists, setPlaylists] =
+        useState<Playlist[]>([])
+
+    const [
+        selectedPlaylistIds,
+        setSelectedPlaylistIds,
+    ] = useState<string[]>([])
+
+    const [
+        isLoadingPlaylists,
+        setIsLoadingPlaylists,
+    ] = useState(false)
+
+
+    const playlistOptions:
+        PlaylistOption[] =
+        playlists.map(
+            (playlist) => ({
+                value:
+                    playlist.id,
+
+                label:
+                    playlist.title,
+            }),
+        )
+
+
+    async function loadPlaylists() {
+        if (!enabled) {
+            return
+        }
+
+        setIsLoadingPlaylists(
+            true,
+        )
 
         try {
-            const result = await window.electronAPI.listPlaylists();
-            setPlaylists(result);
-        } catch (err) {
+            const result =
+                await fetchPlaylists()
+
+            setPlaylists(
+                result,
+            )
+
+        } catch (error) {
             setProgress({
                 stage: "warning",
-                message: `Failed to load playlists: ${String(err)}`,
-            });
+
+                message:
+                    `Failed to load playlists: ${String(error)}`,
+            })
+
         } finally {
-            setIsLoadingPlaylists(false);
+            setIsLoadingPlaylists(
+                false,
+            )
         }
-    };
+    }
+
 
     useEffect(() => {
-        if (authStatus.token) {
-            loadPlaylists();
-        } else {
-            setPlaylists([]);
-            setSelectedPlaylistIds([]);
+        /*
+         * Never carry playlist selections
+         * between YouTube channels.
+         */
+        setSelectedPlaylistIds([])
+
+        if (!enabled) {
+            setPlaylists([])
+            return
         }
-    }, [authStatus.token]);
+
+        void loadPlaylists()
+
+    }, [
+        enabled,
+        sourceKey,
+    ])
+
 
     return {
         playlists,
         playlistOptions,
+
         selectedPlaylistIds,
         setSelectedPlaylistIds,
+
         isLoadingPlaylists,
         loadPlaylists,
-    };
+    }
 }

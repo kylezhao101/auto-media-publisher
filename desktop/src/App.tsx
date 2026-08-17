@@ -1,390 +1,393 @@
-import { useState } from "react";
-import type { Encoder, PerformanceMode, Visibility } from "./vite-env";
-import Select, { type MultiValue } from 'react-select'
-import type { RenderedVideo, PlaylistOption, Thumbnail } from "./types/amp";
-import { DEFAULT_TITLE, DEFAULT_DESCRIPTION } from "./constants/defaults";
-import { useAuthStatus } from "./hooks/useAuthStatus";
-import { useRenders } from "./hooks/useRenders";
-import { useJobRunner } from "./hooks/useJobRunner";
-import { usePlaylists } from "./hooks/usePlaylists";
+import {
+  useEffect,
+  useState,
+} from "react"
+
+import type { Page } from "./types/pages"
+
+import { PublishPage } from "./pages/PublishPage"
+import { OrganizationPage } from "./pages/OrganizationPage"
+
+import { CreateOrganizationDialog } from "./pages/organization/CreateOrganizationDialog"
+
+import { useOrganization } from "./hooks/useOrganization"
+import { useAuthStatus } from "./hooks/useGCPTokenAuthStatus"
+import { useYouTubeConnection } from "./hooks/useYoutubeConnection"
+
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+
+import {
+  Building2,
+  Plus,
+  UserRound,
+} from "lucide-react"
+
+
+const CREATE_ORGANIZATION_VALUE =
+  "__create_organization__"
+
 
 function App() {
-  const [videos, setVideos] = useState<string[]>([]);
-  const [thumbnail, setThumbnail] = useState<Thumbnail | null>(null);
-  const [title, setTitle] = useState(DEFAULT_TITLE);
-  const [description, setDescription] = useState(DEFAULT_DESCRIPTION);
-  const [encoder, setEncoder] = useState<Encoder>("gpu");
-  const [performanceMode, setPerformanceMode] =
-    useState<PerformanceMode>("balanced");
-  const [visibilityStatus, setVisibilityStatus] =
-    useState<Visibility>("private");
+  const [page, setPage] =
+    useState<Page>("publish")
 
-  const { authStatus, importCredentials, refreshAuthStatus } = useAuthStatus();
-  const { renders, loadRenders } = useRenders();
-  const {
-    progress,
-    setProgress,
-    isRunning,
-    startJob,
-    uploadExisting,
-    cancelJob,
-  } = useJobRunner();
+  const [workspace, setWorkspace] =
+    useState("local")
+
+  const [
+    createOrganizationOpen,
+    setCreateOrganizationOpen,
+  ] = useState(false)
+
+
+  const organization =
+    useOrganization()
+
 
   const {
-    playlistOptions,
-    selectedPlaylistIds,
-    setSelectedPlaylistIds,
-    isLoadingPlaylists,
-    loadPlaylists,
-  } = usePlaylists({ authStatus, setProgress });
+    authStatus,
+    importCredentials,
+    refreshAuthStatus,
+  } = useAuthStatus()
 
-  const handleConnectYouTube = async () => {
-    setProgress({ stage: "warning", message: "Opening Google sign-in..." });
 
-    try {
-      const result = await window.electronAPI.connectToYouTube();
+  const youtube =
+    useYouTubeConnection(
+      workspace,
+      organization,
+      {
+        connected:
+          Boolean(authStatus.token),
 
-      if (result.success) {
-        await refreshAuthStatus();
-        setProgress({ stage: "done", message: "YouTube connected." });
+        channelId:
+          authStatus.channelId,
+
+        channelName:
+          authStatus.channelName,
+
+        channelHandle:
+          authStatus.channelHandle,
+
+        channelThumbnail:
+          authStatus.channelThumbnail,
+      },
+    )
+
+
+  const selectedOrganization =
+    organization.organizations.find(
+      (org) =>
+        org.id === workspace,
+    )
+
+
+  const workspaceLabel =
+    workspace === "local"
+      ? "Personal"
+      : selectedOrganization?.name ??
+      "Select workspace"
+
+
+  function handleWorkspaceChange(
+    value: string | null,
+  ) {
+    if (
+      value ===
+      CREATE_ORGANIZATION_VALUE
+    ) {
+      setCreateOrganizationOpen(true)
+      return
+    }
+
+    setWorkspace(
+      value ?? "local",
+    )
+  }
+
+
+  function handleOrganizationCreated(
+    organizationId: string,
+  ) {
+    setWorkspace(
+      organizationId,
+    )
+
+    setPage(
+      "organization",
+    )
+  }
+
+
+  function handlePublishPage() {
+    setPage("publish")
+  }
+
+
+  function handleOrganizationPage() {
+    setPage("organization")
+
+    if (workspace === "local") {
+      void youtube.refresh()
+      return
+    }
+
+    void organization.refreshWorkspace(
+      workspace,
+    )
+
+    void youtube.refresh()
+  }
+
+
+  useEffect(() => {
+    if (!organization.session) {
+      setWorkspace("local")
+    }
+  }, [organization.session])
+
+
+  useEffect(() => {
+    if (workspace === "local") {
+      return
+    }
+
+    const exists =
+      organization.organizations.some(
+        (org) =>
+          org.id === workspace,
+      )
+
+    if (!exists) {
+      setWorkspace("local")
+    }
+  }, [
+    workspace,
+    organization.organizations,
+  ])
+
+
+  useEffect(() => {
+    function handleFocus() {
+      if (page !== "organization") {
+        return
       }
-    } catch (err) {
-      setProgress({
-        stage: "warning",
-        message: `YouTube connection failed: ${String(err)}`,
-      });
+
+      if (workspace !== "local") {
+        void organization.refreshWorkspace(
+          workspace,
+        )
+
+        void youtube.refresh()
+      }
     }
-  };
 
-  const handleSelectVideos = async () => {
-    const selected = await window.electronAPI.selectVideos();
-    setVideos(selected);
-  };
+    window.addEventListener(
+      "focus",
+      handleFocus,
+    )
 
-  const handleSelectThumbnail = async () => {
-    const selected = await window.electronAPI.selectThumbnail();
-    setThumbnail(selected);
-  };
-
-  const handleStartJob = () =>
-    startJob({
-      videos,
-      thumbnail,
-      title,
-      description,
-      encoder,
-      performanceMode,
-      visibilityStatus,
-      selectedPlaylistIds,
-      loadRenders,
-    });
-
-  const handleUploadExisting = (render: RenderedVideo) =>
-    uploadExisting({
-      render,
-      thumbnail,
-      title,
-      description,
-      encoder,
-      performanceMode,
-      visibilityStatus,
-      selectedPlaylistIds,
-    });
-
-
-  const handleCancelJob = () => cancelJob(loadRenders);
-
-  const progressLabel = () => {
-    if (!progress) return "";
-    if (progress.stage === "rendering") {
-      return `Rendering… ${progress.percent ?? 0}%`;
+    return () => {
+      window.removeEventListener(
+        "focus",
+        handleFocus,
+      )
     }
-    if (progress.stage === "uploading") {
-      return `Uploading… ${progress.percent ?? 0}%`;
-    }
-    if (progress.stage === "done") {
-      return progress.video_id
-        ? `Done. Video ID: ${progress.video_id}`
-        : `${progress.message ?? "Done"}`;
-    }
-    if (progress.stage === "warning") return `${progress.message}`;
-    return "";
-  };
+  }, [
+    page,
+    workspace,
+    organization.session?.user.id,
+  ])
 
-  const canStart = thumbnail && videos.length > 0 && authStatus.token;
 
   return (
-    <main className="app-shell">
-      <section className="auth-card">
-        <div>
-          <h2>Connection</h2>
+    <main className="min-h-screen bg-background text-foreground">
 
-          <div className="status-grid">
-            <span className="muted">Credentials</span>
-            <span className={authStatus.credentials ? "success" : "warning"}>
-              {authStatus.credentials ? "Loaded" : "Missing"}
-            </span>
+      <header className="bg-background">
+        <div className="mx-auto flex max-w-7xl items-center gap-4 px-5 py-3">
 
-            <span className="muted">YouTube</span>
-            <span className={authStatus.token ? "success" : "warning"}>
-              {authStatus.token ? "Connected" : "Not connected"}
-            </span>
-          </div>
-        </div>
+          <h1 className="mr-auto text-base font-semibold">
+            Auto Media Publisher
+          </h1>
 
-        <div className="row">
-          <button onClick={importCredentials} disabled={isRunning}>
-            Import credentials
-          </button>
 
-          <button
-            onClick={handleConnectYouTube}
-            disabled={isRunning || !authStatus.credentials}
-          >
-            Connect YouTube
-          </button>
+          <nav className="flex items-center rounded-lg bg-muted p-1">
 
-          <button
-            type="button"
-            onClick={refreshAuthStatus}
-            disabled={isRunning}
-          >
-            Refresh status
-          </button>
-
-          <button
-            type="button"
-            onClick={() => window.electronAPI.openLogsFolder()}
-          >
-            Open logs
-          </button>
-        </div>
-      </section>
-
-      <section className="publish-card">
-        <div className="media-panel">
-          <div>
-            <h2>Media</h2>
-            <p className="muted">Choose source clips and a thumbnail.</p>
-          </div>
-
-          <button onClick={handleSelectVideos} disabled={isRunning}>
-            Select clips
-          </button>
-
-          {videos.length > 0 ? (
-            <div className="clip-list">
-              {videos.map((video) => (
-                <div className="clip-item" key={video}>
-                  {video}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="empty-state">No clips selected.</div>
-          )}
-
-          <button onClick={handleSelectThumbnail} disabled={isRunning}>
-            Select thumbnail
-          </button>
-
-          {thumbnail ? (
-            <img
-              src={thumbnail.preview}
-              alt="thumbnail"
-              className="thumbnail-preview"
-            />
-          ) : (
-            <div className="thumbnail-placeholder">No thumbnail selected.</div>
-          )}
-        </div>
-
-        <div className="details-panel">
-          <div>
-            <h2>Publishing details</h2>
-            <p className="muted">Set video metadata and rendering options.</p>
-          </div>
-
-          <label className="form-row">
-            <span>Title</span>
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              disabled={isRunning}
-            />
-          </label>
-
-          <label className="form-row">
-            <span>Description</span>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              disabled={isRunning}
-              rows={12}
-            />
-          </label>
-
-          <div className="settings-row">
-            <label className="form-row">
-              <span>Encoder</span>
-              <select
-                value={encoder}
-                onChange={(e) => setEncoder(e.target.value as "cpu" | "gpu")}
-                disabled={isRunning}
-              >
-                <option value="gpu">GPU / NVIDIA NVENC</option>
-                <option value="cpu">CPU / x264</option>
-              </select>
-            </label>
-
-            <label className="form-row">
-              <span>Performance</span>
-              <select
-                value={performanceMode}
-                onChange={(e) =>
-                  setPerformanceMode(
-                    e.target.value as "fast" | "balanced" | "low"
-                  )
-                }
-                disabled={isRunning}
-              >
-                <option value="fast">Fast</option>
-                <option value="balanced">Balanced</option>
-                <option value="low">Low impact</option>
-              </select>
-            </label>
-          </div>
-
-          <div className="settings-row">
-            <label className="form-row">
-              <span>Visibility</span>
-              <select
-                value={visibilityStatus}
-                onChange={(e) =>
-                  setVisibilityStatus(
-                    e.target.value as "private" | "unlisted" | "public"
-                  )
-                }
-              >
-                <option value="private">Private</option>
-                <option value="unlisted">Unlisted</option>
-                <option value="public">Public</option>
-              </select>
-            </label>
-            <label className="form-row">
-              <span>Playlists</span>
-
-              <Select<PlaylistOption, true>
-                classNamePrefix="playlist-select"
-                isMulti
-                options={playlistOptions}
-                isDisabled={isRunning || !authStatus.token}
-                placeholder={
-                  authStatus.token ? "Select playlists..." : "Connect YouTube first"
-                }
-                onChange={(selected: MultiValue<PlaylistOption>) => {
-                  setSelectedPlaylistIds(selected.map((option) => option.value));
-                }}
-              />
-
-              <button
-                type="button"
-                onClick={loadPlaylists}
-                disabled={
-                  isRunning ||
-                  isLoadingPlaylists ||
-                  !authStatus.token
-                }
-              >
-                {isLoadingPlaylists
-                  ? "Refreshing..."
-                  : "Refresh playlists"}
-              </button>
-            </label>
-          </div>
-
-          <div className="actions">
             <button
-              className="primary-button"
-              onClick={handleStartJob}
-              disabled={isRunning || !canStart}
+              type="button"
+              onClick={handlePublishPage}
+              className={`
+                rounded-md px-3 py-1.5
+                text-sm font-medium
+                transition-colors
+                ${page === "publish"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+                }
+              `}
             >
-              {isRunning ? "Processing…" : "Start processing"}
+              Publish
             </button>
 
-            {isRunning && (
-              <button className="danger-button" onClick={handleCancelJob}>
-                Cancel job
-              </button>
-            )}
-          </div>
 
-          {!authStatus.token && (
-            <p className="warning small-text">
-              Connect YouTube before starting an upload.
-            </p>
-          )}
-        </div>
-      </section>
+            <button
+              type="button"
+              onClick={handleOrganizationPage}
+              className={`
+                rounded-md px-3 py-1.5
+                text-sm font-medium
+                transition-colors
+                ${page === "organization"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+                }
+              `}
+            >
+              Organization
+            </button>
 
-      {progress && (
-        <section className="progress-card">
-          <div className="row between">
-            <strong>{progressLabel()}</strong>
-          </div>
+          </nav>
 
-          {(progress.stage === "rendering" || progress.stage === "uploading") && (
-            <progress value={progress.percent ?? 0} max={100} />
-          )}
-        </section>
-      )}
 
-      <section>
-        <div className="row between">
-          <div>
-            <h2>Existing rendered videos</h2>
-            <p className="muted">Retry uploads without rendering again.</p>
-          </div>
+          <Select
+            value={workspace}
+            onValueChange={
+              handleWorkspaceChange
+            }
+          >
+            <SelectTrigger className="w-52">
+              <SelectValue>
+                <div className="flex items-center gap-2">
 
-          <button onClick={loadRenders} disabled={isRunning}>
-            Refresh
-          </button>
-        </div>
+                  {workspace === "local" ? (
+                    <UserRound className="size-4 text-muted-foreground" />
+                  ) : (
+                    <Building2 className="size-4 text-muted-foreground" />
+                  )}
 
-        {renders.length > 0 ? (
-          <div className="render-list">
-            {renders.map((render) => (
-              <div className="render-item" key={render.path}>
-                <div>
-                  {render.name}
-                  <p className="muted">
-                    {(render.size / 1024 / 1024 / 1024).toFixed(2)} GB ·{" "}
-                    {new Date(render.modifiedAt).toLocaleString()}
-                  </p>
+
+                  <span className="truncate">
+                    {workspaceLabel}
+                  </span>
+
                 </div>
-                <div className="row">
-                  <button
-                    onClick={() => handleUploadExisting(render)}
-                    disabled={isRunning || !authStatus.token}
-                  >
-                    Upload this
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => window.electronAPI.showInFolder(render.path)}
-                  >
-                    Show in folder
-                  </button>
+              </SelectValue>
+            </SelectTrigger>
+
+
+            <SelectContent>
+
+              <SelectItem value="local">
+                <div className="flex items-center gap-2">
+                  <UserRound className="size-4 text-muted-foreground" />
+
+                  <span>
+                    Personal
+                  </span>
                 </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="empty-state">No rendered videos found.</div>
-        )}
-      </section>
+              </SelectItem>
+
+
+              {organization.organizations.map(
+                (org) => (
+                  <SelectItem
+                    key={org.id}
+                    value={org.id}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Building2 className="size-4 text-muted-foreground" />
+
+                      <span>
+                        {org.name}
+                      </span>
+                    </div>
+                  </SelectItem>
+                ),
+              )}
+
+
+              <SelectSeparator />
+
+
+              <SelectItem
+                value={
+                  CREATE_ORGANIZATION_VALUE
+                }
+              >
+                <div className="flex items-center gap-2">
+                  <Plus className="size-4 text-muted-foreground" />
+
+                  <span>
+                    Create organization
+                  </span>
+                </div>
+              </SelectItem>
+
+            </SelectContent>
+          </Select>
+
+        </div>
+      </header>
+
+
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-5 pb-5">
+
+        <div
+          className={
+            page === "publish"
+              ? "block"
+              : "hidden"
+          }
+        >
+          <PublishPage
+            workspace={workspace}
+            organization={organization}
+            authStatus={authStatus}
+            importCredentials={importCredentials}
+            refreshAuthStatus={refreshAuthStatus}
+            youtube={youtube}
+          />
+        </div>
+
+
+        <div
+          className={
+            page === "organization"
+              ? "block"
+              : "hidden"
+          }
+        >
+          <OrganizationPage
+            workspace={workspace}
+            organization={organization}
+            authStatus={authStatus}
+            youtube={youtube}
+          />
+        </div>
+
+      </div>
+
+
+      <CreateOrganizationDialog
+        open={createOrganizationOpen}
+        onOpenChange={
+          setCreateOrganizationOpen
+        }
+        organization={organization}
+        onCreated={
+          handleOrganizationCreated
+        }
+      />
+
     </main>
-  );
+  )
 }
 
-export default App;
+
+export default App

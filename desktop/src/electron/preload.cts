@@ -13,14 +13,35 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
   listRenders: () => ipcRenderer.invoke("list-renders"),
   cancelJob: () => ipcRenderer.invoke("cancel-job"),
-  uploadExisting: (payload: any) => ipcRenderer.invoke("start-job,", {
+  uploadExisting: (payload: any) => ipcRenderer.invoke("start-job", {
     ...payload,
     mode: "upload-existing"
   }),
-  getAuthStatus: () => ipcRenderer.invoke("get-auth-status"),
+  getGCPAuthStatus: () => ipcRenderer.invoke("get-auth-status"),
   importCredentials: () => ipcRenderer.invoke("import-credentials"),
   connectToYouTube: () => ipcRenderer.invoke("connect-to-youtube"),
   listPlaylists: () => ipcRenderer.invoke("list-playlists"),
   showInFolder: (filePath: string) => ipcRenderer.invoke("show-in-folder", filePath),
   openLogsFolder: () => ipcRenderer.invoke("open-logs-folder"),
+  openExternal: (url: string) =>
+    ipcRenderer.invoke("open-external", url),
+  onAuthCallback: (callback: (url: string) => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      url: string,
+    ) => {
+      callback(url)
+    }
+
+    ipcRenderer.on("auth-callback", listener)
+
+    return () => {
+      ipcRenderer.removeListener(
+        "auth-callback",
+        listener,
+      )
+    }
+  },
+  getYouTubeChannel: () =>
+    ipcRenderer.invoke("get-youtube-channel"),
 });

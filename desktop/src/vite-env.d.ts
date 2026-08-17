@@ -26,18 +26,29 @@ export type Encoder = "cpu" | "gpu";
 export type PerformanceMode = "fast" | "balanced" | "low";
 export type Visibility = "private" | "unlisted" | "public"
 
+export type YouTubeAuth =
+    | {
+        type: "local"
+    }
+    | {
+        type: "access_token"
+        access_token: string
+    }
+
 type StartJobPayload = {
-    mode?: "render-and-upload" | "upload-existing";
-    clips: string[];
-    thumbnail: Thumbnail | null;
-    title: string;
-    description: string;
-    output_path?: string;
-    encoder: Encoder;
-    performance_mode: PerformanceMode;
-    visibility: Visibility;
-    playlist_ids: string[];
-};
+    mode?: "render-and-upload" | "upload-existing"
+    clips: string[]
+    thumbnail: Thumbnail | null
+    title: string
+    description: string
+    output_path?: string
+    encoder: Encoder
+    performance_mode: PerformanceMode
+    visibility: Visibility
+    playlist_ids: string[]
+
+    youtube_auth: YouTubeAuth
+}
 
 declare global {
     interface Window {
@@ -52,13 +63,23 @@ declare global {
             getCredentialsStatus: () => Promise<{ exists: boolean; path?: string }>;
             importCredentials: () => Promise<{ success: boolean; path?: string }>;
             connectToYouTube: () => Promise<{ success: boolean }>;
-            getAuthStatus: () => Promise<{ credentials: boolean; token: boolean }>;
+            getGCPAuthStatus: () => Promise<{ credentials: boolean; token: boolean }>;
             listPlaylists: () => Promise<{
                 id: string;
                 title: string;
             }[]>;
             showInFolder: (filePath: string) => Promise<void>;
             openLogsFolder: () => Promise<void>;
+            openExternal: (url: string) => Promise<void>;
+            onAuthCallback: (
+                callback: (url: string) => void,
+            ) => () => void;
+            getYouTubeChannel: () => Promise<{
+                channel_id: string
+                channel_name: string
+                channel_handle?: string
+                channel_thumbnail?: string
+            }>
         };
     }
 }
