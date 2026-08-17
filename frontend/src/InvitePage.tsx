@@ -267,7 +267,7 @@ export function InvitePage() {
                         </CardDescription>
                     </CardHeader>
 
-                    <CardContent>
+                    <CardContent className="space-y-3">
                         <Button
                             className="w-full"
                             onClick={() => {
@@ -277,15 +277,12 @@ export function InvitePage() {
                         >
                             Download Auto Media Publisher
                         </Button>
-                        <Button
-                            className="w-full"
-                            onClick={() => {
-                                window.location.href =
-                                    "/"
-                            }}
-                        >
-                            Continue
-                        </Button>
+
+                        <p className="text-center text-xs text-muted-foreground">
+                            Already have Auto Media Publisher?
+                            You can now close this page and return
+                            to the desktop app.
+                        </p>
                     </CardContent>
                 </Card>
             </main>
