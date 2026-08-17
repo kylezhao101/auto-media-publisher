@@ -272,7 +272,7 @@ export function InvitePage() {
                             className="w-full"
                             onClick={() => {
                                 window.location.href =
-                                    "YOUR_DOWNLOAD_URL"
+                                    DESKTOP_DOWNLOAD_URL
                             }}
                         >
                             Download Auto Media Publisher
