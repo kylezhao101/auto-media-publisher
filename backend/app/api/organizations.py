@@ -5,7 +5,10 @@ from fastapi import APIRouter, HTTPException, Depends, status
 from app.auth import get_current_user
 
 from app.schemas.organization import OrganizationCreate, OrganizationResponse
-from app.services.organization_service import get_organization_membership
+from app.services.organization_service import (
+    get_organization_membership,
+    require_organization_role,
+)
 
 from app.services.supabase_service import supabase
 
@@ -58,6 +61,36 @@ def create_organization(
         )
 
     return organization
+
+
+@router.delete(
+    "/{organization_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_organization(
+    organization_id: UUID,
+    user=Depends(get_current_user),
+):
+    require_organization_role(
+        organization_id,
+        user.id,
+        {"owner"},
+    )
+
+    response = (
+        supabase.table("organizations")
+        .delete()
+        .eq("id", str(organization_id))
+        .execute()
+    )
+
+    if not response.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found",
+        )
+
+    return None
 
 
 @router.get(
