@@ -273,3 +273,72 @@ def list_youtube_playlists(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to load YouTube playlists",
         ) from exc
+
+
+@organization_router.post(
+    "/upload-session",
+)
+def create_youtube_upload_session(
+    organization_id: UUID,
+    user=Depends(get_current_user),
+):
+    require_organization_role(
+        organization_id,
+        user.id,
+        {
+            "owner",
+            "admin",
+            "publisher",
+        },
+    )
+
+    response = (
+        supabase.table("youtube_connections")
+        .select("channel_id, " "channel_name, " "refresh_token_encrypted")
+        .eq(
+            "organization_id",
+            str(organization_id),
+        )
+        .execute()
+    )
+
+    if not response.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=("YouTube is not connected " "for this organization"),
+        )
+
+    connection = response.data[0]
+
+    refresh_token = decrypt_token(
+        connection["refresh_token_encrypted"],
+    )
+
+    try:
+        credentials = create_youtube_credentials_from_refresh_token(
+            refresh_token,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=("Failed to create YouTube " "upload session"),
+        ) from exc
+
+    if not credentials.token:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=("Google did not return " "an access token"),
+        )
+
+    if not credentials.expiry:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=("Google did not return " "an access token expiry"),
+        )
+
+    return {
+        "access_token": credentials.token,
+        "expires_at": (credentials.expiry.isoformat()),
+        "channel_id": connection["channel_id"],
+        "channel_name": connection["channel_name"],
+    }
