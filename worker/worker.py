@@ -10,7 +10,11 @@ import signal
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env", override=True)
 
 from render import render
-from youtube import upload_video, list_playlists
+from youtube import (
+    upload_video,
+    list_playlists,
+    get_channel,
+)
 from logger import setup_logger
 
 logger = setup_logger()
@@ -41,9 +45,24 @@ def main():
     try:
         job = json.loads(sys.stdin.read())
 
+        youtube_auth = job.get(
+            "youtube_auth",
+            {
+                "type": "local",
+            },
+        )
+
         mode = job.get("mode", "render-and-upload")
         logger.info(f"Worker started mode={mode}")
         stage = f"mode:{mode}"
+
+        if mode == "get-channel":
+            channel = get_channel()
+            print(
+                json.dumps(channel),
+                flush=True,
+            )
+            return
 
         if mode == "list-playlists":
             playlists = list_playlists()
@@ -100,6 +119,7 @@ def main():
             thumbnail_path,
             visibility=visibility,
             playlist_ids=playlist_ids,
+            youtube_auth=youtube_auth,
             on_progress=lambda p: emit({"stage": "uploading", "percent": p}),
         )
         logger.info(f"Upload completed video_id={video_id}")

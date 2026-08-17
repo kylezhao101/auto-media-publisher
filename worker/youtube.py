@@ -39,29 +39,74 @@ RETRIABLE_EXCEPTIONS = (
 RETRIABLE_STATUS_CODES = [500, 502, 503, 504]
 
 
-def get_youtube_client():
+def get_local_youtube_client():
     if not GOOGLE_TOKEN_PATH.exists():
         raise RuntimeError(
-            f"Google token not found. Please connect YouTube first: {GOOGLE_TOKEN_PATH}"
+            f"Google token not found. "
+            f"Please connect YouTube first: "
+            f"{GOOGLE_TOKEN_PATH}"
         )
 
     token_info = json.loads(GOOGLE_TOKEN_PATH.read_text(encoding="utf-8"))
 
-    creds = Credentials.from_authorized_user_info(token_info, YOUTUBE_SCOPES)
+    creds = Credentials.from_authorized_user_info(
+        token_info,
+        YOUTUBE_SCOPES,
+    )
 
     if creds.expired:
         if not creds.refresh_token:
-            raise RuntimeError("No refresh token found. Please reconnect YouTube.")
+            raise RuntimeError("No refresh token found. " "Please reconnect YouTube.")
 
         creds.refresh(Request())
 
-        # Save refreshed access token back to AppData
-        GOOGLE_TOKEN_PATH.write_text(creds.to_json(), encoding="utf-8")
+        GOOGLE_TOKEN_PATH.write_text(
+            creds.to_json(),
+            encoding="utf-8",
+        )
 
     if not creds.valid:
         raise RuntimeError("Google credentials invalid after refresh")
 
-    return build("youtube", "v3", credentials=creds)
+    return build(
+        "youtube",
+        "v3",
+        credentials=creds,
+    )
+
+
+def get_youtube_client(
+    youtube_auth: dict | None = None,
+):
+    youtube_auth = youtube_auth or {
+        "type": "local",
+    }
+
+    auth_type = youtube_auth.get(
+        "type",
+    )
+
+    if auth_type == "local":
+        return get_local_youtube_client()
+
+    if auth_type == "access_token":
+        access_token = youtube_auth.get("access_token")
+
+        if not access_token:
+            raise RuntimeError("YouTube access token missing")
+
+        creds = Credentials(
+            token=access_token,
+            scopes=YOUTUBE_SCOPES,
+        )
+
+        return build(
+            "youtube",
+            "v3",
+            credentials=creds,
+        )
+
+    raise RuntimeError(f"Unknown YouTube auth type: {auth_type}")
 
 
 def upload_with_retries(request, on_progress=None, max_retries=8):
@@ -108,9 +153,12 @@ def upload_video(
     thumbnail_path: Path | None = None,
     visibility: str = "private",
     playlist_ids: list[str] | None = None,
+    youtube_auth: dict | None = None,
     on_progress=None,
 ) -> str:
-    youtube = get_youtube_client()
+    youtube = get_youtube_client(
+        youtube_auth,
+    )
 
     playlist_ids = playlist_ids or []
 
@@ -214,3 +262,39 @@ def _add_video_to_playlist(youtube, video_id: str, playlist_id: str) -> None:
             ),
             flush=True,
         )
+
+
+def get_channel() -> dict:
+    youtube = get_youtube_client()
+
+    response = (
+        youtube.channels()
+        .list(
+            part="snippet",
+            mine=True,
+        )
+        .execute()
+    )
+
+    items = response.get(
+        "items",
+        [],
+    )
+
+    if not items:
+        raise RuntimeError("No YouTube channel found")
+
+    channel = items[0]
+    snippet = channel.get(
+        "snippet",
+        {},
+    )
+
+    thumbnail = snippet.get("thumbnails", {}).get("default", {}).get("url")
+
+    return {
+        "channel_id": channel["id"],
+        "channel_name": snippet.get("title"),
+        "channel_handle": snippet.get("customUrl"),
+        "channel_thumbnail": thumbnail,
+    }
