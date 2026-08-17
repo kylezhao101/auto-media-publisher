@@ -14,6 +14,8 @@ from app.services.youtube_oauth_service import (
     exchange_code_for_credentials,
     get_youtube_channel,
     revoke_google_token,
+    create_youtube_credentials_from_refresh_token,
+    get_youtube_playlists,
 )
 from app.services.token_encryption_service import decrypt_token, encrypt_token
 
@@ -221,3 +223,53 @@ def youtube_oauth_callback(
         "channel_handle": channel.get("channel_handle"),
         "channel_thumbnail": channel.get("channel_thumbnail"),
     }
+
+
+@organization_router.get(
+    "/playlists",
+)
+def list_youtube_playlists(
+    organization_id: UUID,
+    user=Depends(get_current_user),
+):
+    get_organization_membership(
+        organization_id,
+        user.id,
+    )
+
+    response = (
+        supabase.table("youtube_connections")
+        .select("refresh_token_encrypted")
+        .eq(
+            "organization_id",
+            str(organization_id),
+        )
+        .execute()
+    )
+
+    if not response.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="YouTube is not connected for this organization",
+        )
+
+    encrypted_refresh_token = response.data[0]["refresh_token_encrypted"]
+
+    refresh_token = decrypt_token(
+        encrypted_refresh_token,
+    )
+
+    try:
+        credentials = create_youtube_credentials_from_refresh_token(
+            refresh_token,
+        )
+
+        return get_youtube_playlists(
+            credentials,
+        )
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to load YouTube playlists",
+        ) from exc

@@ -3,6 +3,9 @@ import os
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+
 import requests
 
 from app.config import (
@@ -129,3 +132,59 @@ def revoke_google_token(token: str) -> None:
             return
 
     response.raise_for_status()
+
+
+def create_youtube_credentials_from_refresh_token(
+    refresh_token: str,
+) -> Credentials:
+    credentials = Credentials(
+        token=None,
+        refresh_token=refresh_token,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=GOOGLE_CLIENT_ID,
+        client_secret=GOOGLE_CLIENT_SECRET,
+        scopes=YOUTUBE_SCOPES,
+    )
+
+    credentials.refresh(Request())
+
+    return credentials
+
+
+def get_youtube_playlists(
+    credentials: Credentials,
+) -> list[dict]:
+    youtube = build(
+        "youtube",
+        "v3",
+        credentials=credentials,
+    )
+
+    playlists: list[dict] = []
+
+    request = youtube.playlists().list(
+        part="snippet",
+        mine=True,
+        maxResults=50,
+    )
+
+    while request:
+        response = request.execute()
+
+        for item in response.get(
+            "items",
+            [],
+        ):
+            playlists.append(
+                {
+                    "id": item["id"],
+                    "title": item["snippet"]["title"],
+                }
+            )
+
+        request = youtube.playlists().list_next(
+            request,
+            response,
+        )
+
+    return playlists
