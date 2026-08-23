@@ -28,6 +28,7 @@ from app.services.organization_service import (
 
 from app.services.supabase_service import supabase
 from app.api.helpers.member_email import get_member_email
+from app.services.audit_log_service import log_organization_action
 
 organization_router = APIRouter()
 invitation_router = APIRouter()
@@ -168,6 +169,18 @@ def create_invitation(
             detail="Failed to send invitation email",
         ) from exc
 
+    log_organization_action(
+        organization_id=organization_id,
+        actor_user_id=user.id,
+        actor_email=user.email,
+        action="member.invited",
+        details={
+            "email": email,
+            "role": payload.role,
+            "invitation_id": invitation["id"],
+        },
+    )
+
     return invitation
 
 
@@ -218,6 +231,32 @@ def revoke_invitation(
         {"owner", "admin"},
     )
 
+    existing = (
+        supabase.table("organization_invitations")
+        .select("id, email, role")
+        .eq(
+            "id",
+            str(invitation_id),
+        )
+        .eq(
+            "organization_id",
+            str(organization_id),
+        )
+        .is_(
+            "accepted_at",
+            "null",
+        )
+        .execute()
+    )
+
+    if not existing.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invitation not found",
+        )
+
+    invitation = existing.data[0]
+
     response = (
         supabase.table("organization_invitations")
         .delete()
@@ -241,6 +280,18 @@ def revoke_invitation(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Invitation not found",
         )
+
+    log_organization_action(
+        organization_id=organization_id,
+        actor_user_id=user.id,
+        actor_email=user.email,
+        action="invitation.revoked",
+        details={
+            "invitation_id": str(invitation_id),
+            "email": invitation["email"],
+            "role": invitation["role"],
+        },
+    )
 
     return None
 
@@ -427,11 +478,22 @@ def accept_invitation(
 
     if not accept_response.data:
         raise HTTPException(
-            status_code=(status.HTTP_500_INTERNAL_SERVER_ERROR),
-            detail=("Failed to mark invitation " "as accepted"),
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to mark invitation as accepted",
         )
 
+    log_organization_action(
+        organization_id=invitation["organization_id"],
+        actor_user_id=user.id,
+        actor_email=user.email,
+        action="member.joined",
+        details={
+            "role": invitation["role"],
+            "invitation_id": invitation["id"],
+        },
+    )
+
     return {
-        "organization_id": (invitation["organization_id"]),
+        "organization_id": invitation["organization_id"],
         "role": invitation["role"],
     }
