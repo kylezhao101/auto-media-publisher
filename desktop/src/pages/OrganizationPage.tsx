@@ -25,7 +25,7 @@ import {
     connectOrganizationYouTube,
     disconnectOrganizationYouTube,
 } from "@/api/youtube"
-import { useOrganizationAuditLogs, type OrganizationAuditLogsState } from "@/hooks/useOrganizationAuditLogs"
+import { type OrganizationAuditLogsState } from "@/hooks/useOrganizationAuditLogs"
 
 
 type Props = {
