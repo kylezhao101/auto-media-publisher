@@ -39,15 +39,19 @@ import type { Organization } from "@/api/organizations"
 import { OrganizationInviteCard } from "./OrganizationInviteCard"
 
 import type { YouTubeConnectionState } from "@/hooks/useYoutubeConnection"
+import type { OrganizationAuditLogsState } from '@/hooks/useOrganizationAuditLogs';
+
 import { OrganizationYouTubeCard } from "./OrganizationYouTubeCard"
 import { OrganizationPresetsCard } from "./OrganizationPresetsCard"
 import { OrganizationDangerZone } from "./OrganizationDangerZone"
+import { OrganizationActivity } from "./OrganizationActivity"
 
 type Props = {
     workspace: string
     organization: OrganizationState
     selectedOrganization: Organization
     youtube: YouTubeConnectionState
+    auditLogs: OrganizationAuditLogsState
 
     onConnectYouTube: () => void | Promise<void>
     onDisconnectYouTube: () => void | Promise<void>
@@ -59,6 +63,7 @@ export function OrganizationWorkspace({
     organization,
     selectedOrganization,
     youtube,
+    auditLogs,
     onConnectYouTube,
     onDisconnectYouTube,
 }: Props) {
@@ -393,6 +398,12 @@ export function OrganizationWorkspace({
                 organization={organization}
                 currentUserRole={currentMembership?.role}
             />
+
+            <OrganizationActivity
+                auditLogs={auditLogs}
+                members={organization.members}
+            />
+
 
             <OrganizationDangerZone
                 organization={organization}

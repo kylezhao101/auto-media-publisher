@@ -13,6 +13,7 @@ import { CreateOrganizationDialog } from "./pages/organization/CreateOrganizatio
 import { useOrganization } from "./hooks/useOrganization"
 import { useAuthStatus } from "./hooks/useGCPTokenAuthStatus"
 import { useYouTubeConnection } from "./hooks/useYoutubeConnection"
+import { useOrganizationAuditLogs } from "./hooks/useOrganizationAuditLogs"
 
 import {
   Select,
@@ -80,6 +81,11 @@ function App() {
       },
     )
 
+  const auditLogs =
+    useOrganizationAuditLogs(
+      workspace,
+      organization,
+    )
 
   const selectedOrganization =
     organization.organizations.find(
@@ -143,6 +149,7 @@ function App() {
     )
 
     void youtube.refresh()
+    void auditLogs.refresh()
   }
 
 
@@ -185,6 +192,8 @@ function App() {
         )
 
         void youtube.refresh()
+        void auditLogs.refresh()
+
       }
     }
 
@@ -203,6 +212,7 @@ function App() {
     page,
     workspace,
     organization.session?.user.id,
+    auditLogs.refresh
   ])
 
 
@@ -368,6 +378,7 @@ function App() {
             organization={organization}
             authStatus={authStatus}
             youtube={youtube}
+            auditLogs={auditLogs}
           />
         </div>
 
