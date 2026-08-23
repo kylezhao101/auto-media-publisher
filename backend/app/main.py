@@ -1,13 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import (
-    invitations,
-    members,
-    organizations,
-    presets,
-    youtube,
-)
+from app.api import invitations, members, organizations, presets, youtube, audit_logs
 
 app = FastAPI(title="AutoMediaPublisher API")
 
@@ -60,6 +54,12 @@ app.include_router(
     invitations.organization_router,
     prefix="/organizations/{organization_id}/invitations",
     tags=["Invitations"],
+)
+
+app.include_router(
+    audit_logs.router,
+    prefix="/organizations/{organization_id}/audit-logs",
+    tags=["Audit Logs"],
 )
 
 

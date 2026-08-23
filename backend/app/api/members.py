@@ -10,6 +10,7 @@ from app.services.organization_service import (
 )
 from app.services.supabase_service import supabase
 from app.api.helpers.member_response import build_member_response
+from app.services.audit_log_service import log_organization_action
 
 router = APIRouter()
 
@@ -108,7 +109,21 @@ def update_member_role(
             detail="Member not found",
         )
 
-    return build_member_response(response.data[0])
+    updated_member = response.data[0]
+
+    log_organization_action(
+        organization_id=organization_id,
+        actor_user_id=user.id,
+        actor_email=user.email,
+        action="member.role_updated",
+        details={
+            "member_user_id": str(member_user_id),
+            "old_role": target_role,
+            "new_role": payload.role,
+        },
+    )
+
+    return build_member_response(updated_member)
 
 
 @router.delete(
@@ -160,6 +175,17 @@ def remove_member(
             detail="Member not found",
         )
 
+    log_organization_action(
+        organization_id=organization_id,
+        actor_user_id=user.id,
+        actor_email=user.email,
+        action="member.removed",
+        details={
+            "member_user_id": str(member_user_id),
+            "role": target_role,
+        },
+    )
+
     return None
 
 
@@ -201,5 +227,15 @@ def leave_organization(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Membership not found",
         )
+
+    log_organization_action(
+        organization_id=organization_id,
+        actor_user_id=user.id,
+        actor_email=user.email,
+        action="member.left",
+        details={
+            "role": membership["role"],
+        },
+    )
 
     return None

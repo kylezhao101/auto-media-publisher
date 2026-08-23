@@ -18,6 +18,8 @@ from app.services.youtube_oauth_service import (
     get_youtube_playlists,
 )
 from app.services.token_encryption_service import decrypt_token, encrypt_token
+from app.services.audit_log_service import log_organization_action
+from app.api.helpers.member_email import get_member_email
 
 import secrets
 
@@ -117,7 +119,7 @@ def disconnect_youtube(
 
     connection_response = (
         supabase.table("youtube_connections")
-        .select("refresh_token_encrypted")
+        .select("channel_id, " "channel_name, " "refresh_token_encrypted")
         .eq(
             "organization_id",
             str(organization_id),
@@ -129,10 +131,10 @@ def disconnect_youtube(
     if not connection_response.data:
         return None
 
-    encrypted_refresh_token = connection_response.data[0]["refresh_token_encrypted"]
+    connection = connection_response.data[0]
 
     refresh_token = decrypt_token(
-        encrypted_refresh_token,
+        connection["refresh_token_encrypted"],
     )
 
     try:
@@ -162,6 +164,17 @@ def disconnect_youtube(
                 "Google access was revoked, " "but the connection could not be removed"
             ),
         )
+
+    log_organization_action(
+        organization_id=organization_id,
+        actor_user_id=user.id,
+        actor_email=user.email,
+        action="youtube.disconnected",
+        details={
+            "channel_id": connection["channel_id"],
+            "channel_name": connection["channel_name"],
+        },
+    )
 
     return None
 
@@ -215,6 +228,19 @@ def youtube_oauth_callback(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to save YouTube connection",
         )
+
+    actor_email = get_member_email(user_id)
+
+    log_organization_action(
+        organization_id=organization_id,
+        actor_user_id=user_id,
+        actor_email=actor_email,
+        action="youtube.connected",
+        details={
+            "channel_id": channel["channel_id"],
+            "channel_name": channel["channel_name"],
+        },
+    )
 
     return {
         "connected": True,
