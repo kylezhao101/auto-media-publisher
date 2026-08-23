@@ -1,41 +1,55 @@
-## Automated Media Publisher
+# Auto Media Publisher
 
-A cloud-native media publishing pipeline that automates video upload, post-processing, and publishing workflows.
+Auto Media Publisher is a desktop-first media publishing tool that streamlines recurring video workflows from local processing through YouTube publishing.
 
-Read about it here: https://kylezhao101.com/content/projects/auto-media-publisher
+Read more:
+https://kylezhao101.com/content/projects/auto-media-publisher
 
-## Overview
+## Contents
 
-Automated Media Publisher is a full-stack system for creating media publishing jobs, uploading video assets, and asynchronously processing content for final distribution.
-
-The platform is designed around a decoupled architecture using a frontend dashboard, REST API backend, and a worker-based processing pipeline.
-
-Current architecture diagram for the cloud implementation:
-
-![System Architecture](./auto-media-publisher.png)
+1. [Overview](#overview)
+2. [Desktop Application](#desktop-application)
+3. [Organization Workspaces](#organization-workspaces)
+4. [Platform Support](#platform-support)
+5. [Personal Credentials](#personal-credentials)
+6. [Original Azure Cloud Implementation](#original-azure-cloud-implementation)
 
 ---
 
-## Desktop
+## Overview
 
-AMP also includes a cross-platform desktop app built with Electron, React, and a Python worker.
+AMP is primarily a cross-platform desktop application built with Electron, React, and a Python worker.
 
-The desktop app is designed for local video publishing workflows where users select video clips, optionally add a thumbnail, render the final output with FFmpeg, and upload directly to YouTube.
+The desktop app handles local media processing with FFmpeg and supports both:
 
-### Desktop Features
+- Personal workspaces using locally stored Google OAuth credentials
+- Organization workspaces using a deployed FastAPI + Supabase backend for shared presets, members, role-based access, invitations, and centrally managed YouTube connections
+
+A separate Azure-based cloud pipeline was developed earlier in the project for asynchronous media processing, but the application later moved to a desktop-first architecture because large recordings and long-running transcoding workloads made cloud storage and compute costs impractical.
+
+---
+
+## Desktop Application
+
+The desktop app is the primary AMP workflow.
+
+Users can:
 
 - select multiple local video clips
 - select a custom thumbnail
 - render and merge clips with FFmpeg
-- choose render/upload mode or upload an existing render
-- connect to YouTube using local Google OAuth credentials
-- list and select YouTube playlists
-- upload videos with privacy settings
-- view render and upload progress
+- apply audio processing
+- choose CPU or GPU encoding
+- configure title, description, visibility, and playlists
+- upload directly to YouTube
+- monitor render and upload progress
 - cancel active jobs
+- retry uploads using existing renders
+- receive desktop notifications
 - open local logs and rendered output files
+- switch between Personal and Organization workspaces
 
-### Desktop Stack
+### Desktop Architecture
 
 - Electron
 - React
@@ -45,161 +59,76 @@ The desktop app is designed for local video publishing workflows where users sel
 - FFmpeg / FFprobe
 - PyInstaller
 - electron-builder
-- GitHub Actions releases
+- GitHub Actions
 
-### Platform Support
+Long-running rendering and publishing work runs in a Python worker process while Electron manages the desktop UI and IPC communication.
+
+---
+
+## Organization Workspaces
+
+Organization workspaces support shared publishing workflows for teams.
+
+Features include:
+
+- organization creation and deletion
+- owner, admin, publisher, and member roles
+- email invitations
+- shared publishing presets
+- organization-level YouTube connections
+- organization playlist access
+- member management
+- organization activity/audit history
+
+The backend is deployed using:
+
+- FastAPI
+- Supabase
+- PostgreSQL
+- Resend
+
+### Authentication
+
+Personal YouTube credentials remain stored locally on the user's device.
+
+Organization YouTube refresh tokens are encrypted server-side before being stored. When a member publishes through an organization, the backend exchanges the refresh token for a short-lived Google access token so the desktop worker never receives the organization's long-lived refresh credential.
+
+---
+
+## Platform Support
 
 - Windows: supported
 - macOS: experimental
 - Linux: not officially tested
 
-macOS builds are supported through platform-aware worker binaries and FFmpeg path handling. Unsigned macOS builds may require right-clicking the app and selecting **Open** on first launch.
-
-### Credentials
-
-AMP does not ship with Google credentials.
-
-To upload to YouTube, users must import their own Google OAuth credentials JSON. AMP stores credentials and tokens locally in the app data directory.
-
-## Cloud Implementation
-
-### Frontend
-
-- React
-- Vite
-- TypeScript
-- Tailwind CSS
-- shadcn/ui
-
-The frontend dashboard is currently deployed on Vercel.
-
-Features include:
-
-- create publishing jobs
-- upload clips and thumbnails
-- track upload progress
-- refresh and monitor job status
+macOS builds are unsigned and may require manually allowing the application to run.
 
 ---
 
-## Backend API
+## Personal Credentials
 
-- FastAPI
-- Docker
+AMP does not ship with Google Cloud credentials for Personal workspaces.
+
+Users who publish through Personal must import their own Google OAuth credentials JSON. Credentials and tokens remain in the local application data directory.
+
+Organization members do not need to distribute shared Google credentials between devices.
+
+---
+
+## Original Azure Cloud Implementation
+
+AMP originally used a separate cloud-native processing pipeline built on Azure.
+
+![System Architecture](./auto-media-publisher.png)
+
+This implementation used:
+
+- React/Vite frontend
+- FastAPI API
 - Azure Blob Storage
 - Azure Queue Storage
+- Azure Container Apps
+- background media workers
 
-The backend handles:
+The system supported asynchronous uploads, transcoding, and publishing jobs. It was later deprioritized in favor of the desktop-first workflow because source recordings often reached tens of gigabytes and required long-running processing workloads, making cloud compute and storage unnecessarily expensive for the intended use case.
 
-- job creation
-- asset registration
-- status retrieval
-- orchestration endpoints for processing
-
-The FastAPI app runs in Docker.
-
----
-
-## Worker
-
-- consumes queued processing jobs
-- merges uploaded video clips
-- runs FFmpeg post-processing
-- generates final media output
-- publishes to YouTube
-- updates job status
-
-Deployment target:
-
-- Azure Container Apps worker
-- queue-triggered processing
-
----
-
-## Deployment
-
-### Frontend
-
-- Hosted on Vercel
-
-### Backend
-
-- Containerized FastAPI service
-- Docker-based deployment
-- Deployed via Azure Container Apps
-
-### Worker
-
-- Deployed via Azure Container Apps wor
-
----
-
-## Project Status
-
-Currently in active development.
-
-### Completed
-
-- frontend dashboard
-- job workflow UI
-- FastAPI backend scaffolding
-- Dockerized API service
-- worker pipeline
-- queue orchestration
-- cloud storage integration
-- automated publishing flow
-
-### In Progress
-
-- CI/CD deployment to Azure via GitHub actions
-- Email alerts
-
-## Deployment / Run Commands
-
-### Run FastAPI locally with Docker
-
-Build the Docker image:
-
-docker build -t auto-media-api .
-
-Run the container locally:
-
-docker run -p 8000:8000 auto-media-api
-
-The API will be available at:
-http://localhost:8000
-
-Interactive docs:
-http://localhost:8000/docs
-
-### Deploy to Azure Container Apps
-
-Build and tag image:
-
-docker build -t auto-media-api .
-
-Tag for Azure Container Registry:
-
-docker tag auto-media-api <acr-name>.azurecr.io/auto-media-api:latest
-
-Push image to ACR:
-
-docker push <acr-name>.azurecr.io/auto-media-api:latest
-
-Deploy to Azure Container Apps:
-
-az containerapp up \
- --name auto-media-api \
- --resource-group <resource-group> \
- --location canadacentral \
- --environment <container-app-env> \
- --image <acr-name>.azurecr.io/auto-media-api:latest \
- --target-port 8000 \
- --ingress external
-
-Update an existing deployment:
-
-az containerapp update \
- --name auto-media-api \
- --resource-group <resource-group> \
- --image <acr-name>.azurecr.io/auto-media-api:latest
