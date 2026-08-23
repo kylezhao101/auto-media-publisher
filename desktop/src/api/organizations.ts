@@ -38,6 +38,16 @@ export type OrganizationInvitation = {
     accepted_at: string | null
 }
 
+export type OrganizationAuditLog = {
+    id: string
+    organization_id: string
+    actor_user_id: string | null
+    actor_email: string | null
+    action: string
+    details: Record<string, unknown>
+    created_at: string
+}
+
 export async function getOrganizations(
     accessToken: string,
 ): Promise<Organization[]> {
@@ -254,4 +264,27 @@ export async function deleteOrganization(
             "Failed to delete organization",
         )
     }
+}
+
+export async function getOrganizationAuditLogs(
+    organizationId: string,
+    accessToken: string,
+): Promise<OrganizationAuditLog[]> {
+    const response = await apiFetch(
+        `/organizations/${organizationId}/audit-logs`,
+        accessToken,
+    )
+
+    if (!response.ok) {
+        const data = await response
+            .json()
+            .catch(() => null)
+
+        throw new Error(
+            data?.detail ??
+            "Failed to load organization activity",
+        )
+    }
+
+    return response.json()
 }

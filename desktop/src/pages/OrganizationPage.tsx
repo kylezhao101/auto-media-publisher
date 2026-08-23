@@ -25,6 +25,7 @@ import {
     connectOrganizationYouTube,
     disconnectOrganizationYouTube,
 } from "@/api/youtube"
+import { type OrganizationAuditLogsState } from "@/hooks/useOrganizationAuditLogs"
 
 
 type Props = {
@@ -32,6 +33,7 @@ type Props = {
     organization: OrganizationState
     authStatus: AuthStatus
     youtube: YouTubeConnectionState
+    auditLogs: OrganizationAuditLogsState
 }
 
 
@@ -39,7 +41,8 @@ export function OrganizationPage({
     workspace,
     organization,
     authStatus,
-    youtube
+    youtube,
+    auditLogs
 }: Props) {
     const {
         session,
@@ -484,6 +487,7 @@ export function OrganizationPage({
             organization={organization}
             selectedOrganization={selectedOrganization}
             youtube={youtube}
+            auditLogs={auditLogs}
             onConnectYouTube={handleConnectYouTube}
             onDisconnectYouTube={handleDisconnectYouTube}
         />
