@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Depens, status, Query
+from fastapi import APIRouter, Depends, Query
 from app.auth import get_current_user
 
 from app.services.organization_service import get_organization_membership
