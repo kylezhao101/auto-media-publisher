@@ -14,3 +14,20 @@ export async function apiFetch(
         },
     })
 }
+
+export async function apiPost(
+    path: string,
+    accessToken: string,
+    body: unknown,
+) {
+    const response = await apiFetch(path, accessToken, {
+        method: "POST",
+        body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+        throw new Error(`Request failed (${response.status})`);
+    }
+
+    return response;
+}

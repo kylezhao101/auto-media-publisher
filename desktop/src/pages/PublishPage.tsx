@@ -354,6 +354,7 @@ export function PublishPage({
                 await getYouTubeAuth()
 
             await startJob({
+                organizationId: isLocal ? null : workspace,
                 videos,
                 thumbnail,
                 title,
@@ -364,7 +365,7 @@ export function PublishPage({
                 selectedPlaylistIds,
                 youtubeAuth,
                 loadRenders,
-            })
+            });
         } catch (error) {
             setProgress({
                 stage: "warning",
@@ -385,6 +386,7 @@ export function PublishPage({
                     await getYouTubeAuth()
 
                 await uploadExisting({
+                    organizationId: isLocal ? null : workspace,
                     render,
                     thumbnail,
                     title,
@@ -394,7 +396,7 @@ export function PublishPage({
                     visibilityStatus,
                     selectedPlaylistIds,
                     youtubeAuth,
-                })
+                });
 
             } catch (error) {
                 setProgress({

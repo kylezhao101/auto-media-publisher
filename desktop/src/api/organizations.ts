@@ -1,4 +1,4 @@
-import { apiFetch } from "./client"
+import { apiFetch, apiPost } from "./client"
 
 export type Organization = {
     id: string
@@ -287,4 +287,20 @@ export async function getOrganizationAuditLogs(
     }
 
     return response.json()
+}
+
+export async function recordSuccessfulUpload(
+    organizationId: string,
+    title: string,
+    videoId: string,
+    accessToken: string,
+): Promise<void> {
+    await apiPost(
+        `/organizations/${organizationId}/uploads`,
+        accessToken,
+        {
+            video_title: title,
+            youtube_video_id: videoId,
+        },
+    )
 }

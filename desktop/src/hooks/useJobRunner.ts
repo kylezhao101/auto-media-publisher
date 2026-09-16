@@ -7,32 +7,64 @@ import type {
 } from "../types/amp"
 import type { Encoder, PerformanceMode, Visibility } from "../vite-env";
 import { desktopNotification } from "../helpers/notifications";
+import { recordSuccessfulUpload } from "@/api/organizations";
+import { supabase } from "../helpers/supabase"
 
 
-type StartJobArgs = {
-    videos: string[]
-    thumbnail: Thumbnail | null
-    title: string
-    description: string
-    encoder: Encoder
-    performanceMode: PerformanceMode
-    visibilityStatus: Visibility
-    selectedPlaylistIds: string[]
-    youtubeAuth: YouTubeAuth
-    loadRenders: () => Promise<void>
-}
+type SharedJobArgs = {
+    organizationId: string | null;
+    thumbnail: Thumbnail | null;
+    title: string;
+    description: string;
+    encoder: Encoder;
+    performanceMode: PerformanceMode;
+    visibilityStatus: Visibility;
+    selectedPlaylistIds: string[];
+    youtubeAuth: YouTubeAuth;
+};
 
+type StartJobArgs = SharedJobArgs & {
+    videos: string[];
+    loadRenders: () => Promise<void>;
+};
 
-type UploadExistingArgs = {
-    render: RenderedVideo
-    thumbnail: Thumbnail | null
-    title: string
-    description: string
-    encoder: Encoder
-    performanceMode: PerformanceMode
-    visibilityStatus: Visibility
-    selectedPlaylistIds: string[]
-    youtubeAuth: YouTubeAuth
+type UploadExistingArgs = SharedJobArgs & {
+    render: RenderedVideo;
+};
+
+async function recordUpload(
+    args: SharedJobArgs,
+    videoId: string,
+): Promise<void> {
+    if (!args.organizationId) {
+        return;
+    }
+
+    try {
+        const { data, error } = await supabase.auth.getSession();
+
+        if (error) {
+            throw error;
+        }
+
+        if (!data.session) {
+            throw new Error("You must be signed in to record the upload.");
+        }
+
+        await recordSuccessfulUpload(
+            args.organizationId,
+            args.title,
+            videoId,
+            data.session.access_token,
+        );
+    } catch (error) {
+        console.error("Failed to record upload", error);
+
+        desktopNotification(
+            "Upload history not saved",
+            "Your video uploaded successfully, but its activity record could not be saved.",
+        );
+    }
 }
 
 export function useJobRunner() {
@@ -53,6 +85,10 @@ export function useJobRunner() {
                         ? `Video uploaded successfully. ID: ${msg.video_id}`
                         : msg.message ?? "Your video was uploaded successfully."
                 );
+
+                if (msg.video_id) {
+                    void recordUpload(args, msg.video_id);
+                }
 
                 setIsRunning(false);
                 cleanup();
@@ -83,8 +119,6 @@ export function useJobRunner() {
 
                 youtube_auth: args.youtubeAuth
             });
-
-            await args.loadRenders();
         } catch (err) {
             const message = String(err);
 
@@ -93,7 +127,12 @@ export function useJobRunner() {
 
             setIsRunning(false);
             cleanup();
+        }
+
+        try {
             await args.loadRenders();
+        } catch (error) {
+            console.error("Failed to refresh rendered videos", error);
         }
     };
 
@@ -104,7 +143,28 @@ export function useJobRunner() {
         const cleanup = window.electronAPI.onJobProgress((msg) => {
             setProgress(msg);
 
-            if (msg.stage === "done" || msg.stage === "warning") {
+            if (msg.stage === "done") {
+                setIsRunning(false);
+                cleanup();
+
+                desktopNotification(
+                    "Upload Complete",
+                    msg.video_id
+                        ? `Video uploaded successfully. ID: ${msg.video_id}`
+                        : msg.message ?? "Your video was uploaded successfully.",
+                );
+
+                if (msg.video_id) {
+                    void recordUpload(args, msg.video_id);
+                }
+            }
+
+            if (msg.stage === "warning") {
+                desktopNotification(
+                    "Upload Warning",
+                    msg.message ?? "The job finished with a warning.",
+                );
+
                 setIsRunning(false);
                 cleanup();
             }
