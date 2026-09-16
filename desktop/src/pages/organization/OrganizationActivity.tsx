@@ -444,6 +444,31 @@ function getActionText(
             )
 
 
+        case "video.uploaded": {
+            const title =
+                getDetailString(log, "video_title") || "Untitled video";
+            const videoId =
+                getDetailString(log, "youtube_video_id");
+
+            return (
+                <>
+                    uploaded{" "}
+                    {videoId ? (
+                        <a
+                            href={`https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-semibold underline underline-offset-4"
+                        >
+                            {title}
+                        </a>
+                    ) : (
+                        <strong>{title}</strong>
+                    )}
+                </>
+            );
+        }
+
         default:
             return log.action
     }
