@@ -152,3 +152,51 @@ def get_organization(
         )
 
     return response.data[0]
+
+
+from uuid import UUID
+
+from fastapi import Depends, HTTPException, status
+from pydantic import BaseModel, Field
+
+
+class UploadAuditCreate(BaseModel):
+    video_title: str = Field(min_length=1, max_length=100)
+    youtube_video_id: str = Field(pattern=r"^[A-Za-z0-9_-]{11}$")
+
+
+@router.post(
+    "/{organization_id}/uploads",
+    status_code=status.HTTP_201_CREATED,
+)
+def record_upload(
+    organization_id: UUID,
+    payload: UploadAuditCreate,
+    user=Depends(get_current_user),
+):
+    get_organization_membership(organization_id, user.id)
+
+    response = (
+        supabase.table("organization_audit_logs")
+        .insert(
+            {
+                "organization_id": str(organization_id),
+                "actor_user_id": str(user.id),
+                "actor_email": user.email,
+                "action": "video.uploaded",
+                "details": {
+                    "video_title": payload.video_title,
+                    "youtube_video_id": payload.youtube_video_id,
+                },
+            }
+        )
+        .execute()
+    )
+
+    if not response.data:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to record upload",
+        )
+
+    return response.data[0]
