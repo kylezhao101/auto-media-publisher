@@ -1,19 +1,16 @@
-import {
-  useEffect,
-  useState,
-} from "react"
+import { useEffect, useState } from "react";
 
-import type { Page } from "./types/pages"
+import type { Page } from "./types/pages";
 
-import { PublishPage } from "./pages/PublishPage"
-import { OrganizationPage } from "./pages/OrganizationPage"
+import { PublishPage } from "./pages/PublishPage";
+import { OrganizationPage } from "./pages/OrganizationPage";
 
-import { CreateOrganizationDialog } from "./pages/organization/CreateOrganizationDialog"
+import { CreateOrganizationDialog } from "./pages/organization/CreateOrganizationDialog";
 
-import { useOrganization } from "./hooks/useOrganization"
-import { useAuthStatus } from "./hooks/useGCPTokenAuthStatus"
-import { useYouTubeConnection } from "./hooks/useYoutubeConnection"
-import { useOrganizationAuditLogs } from "./hooks/useOrganizationAuditLogs"
+import { useOrganization } from "./hooks/useOrganization";
+import { useAuthStatus } from "./hooks/useGCPTokenAuthStatus";
+import { useYouTubeConnection } from "./hooks/useYoutubeConnection";
+import { useOrganizationAuditLogs } from "./hooks/useOrganizationAuditLogs";
 
 import {
   Select,
@@ -22,337 +19,296 @@ import {
   SelectSeparator,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 
+import { Building2, Plus, UserRound } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { WorkspaceOnboarding } from "@/components/WorkspaceOnboarding";
 import {
-  Building2,
-  Plus,
-  UserRound,
-} from "lucide-react"
+  ONBOARDING_KEY,
+  WORKSPACE_KEY,
+  readOnboardingStep,
+  readPreference,
+  savePreference,
+  type OnboardingStep,
+} from "@/helpers/onboarding";
 
-
-const CREATE_ORGANIZATION_VALUE =
-  "__create_organization__"
-
+const CREATE_ORGANIZATION_VALUE = "__create_organization__";
 
 function App() {
-  const [page, setPage] =
-    useState<Page>("publish")
+  const [page, setPage] = useState<Page>(() => {
+    const step = readOnboardingStep();
+    return step === "join" || step === "create" ? "organization" : "publish";
+  });
 
-  const [workspace, setWorkspace] =
-    useState("local")
+  const [workspace, setWorkspace] = useState("local");
+  const [rememberedWorkspace, setRememberedWorkspace] = useState(
+    () => readPreference(WORKSPACE_KEY) ?? "local"
+  );
+  const [onboardingStep, setOnboardingStep] = useState(readOnboardingStep);
+  const [setupOpen, setSetupOpen] = useState(false);
 
-  const [
-    createOrganizationOpen,
-    setCreateOrganizationOpen,
-  ] = useState(false)
+  const [createOrganizationOpen, setCreateOrganizationOpen] = useState(false);
 
+  const organization = useOrganization();
 
-  const organization =
-    useOrganization()
+  const { authStatus, importCredentials, refreshAuthStatus } = useAuthStatus();
 
+  const youtube = useYouTubeConnection(workspace, organization, {
+    connected: Boolean(authStatus.token),
 
-  const {
-    authStatus,
-    importCredentials,
-    refreshAuthStatus,
-  } = useAuthStatus()
+    channelId: authStatus.channelId,
 
+    channelName: authStatus.channelName,
 
-  const youtube =
-    useYouTubeConnection(
-      workspace,
-      organization,
-      {
-        connected:
-          Boolean(authStatus.token),
+    channelHandle: authStatus.channelHandle,
 
-        channelId:
-          authStatus.channelId,
+    channelThumbnail: authStatus.channelThumbnail,
+  });
 
-        channelName:
-          authStatus.channelName,
+  const auditLogs = useOrganizationAuditLogs(workspace, organization);
 
-        channelHandle:
-          authStatus.channelHandle,
-
-        channelThumbnail:
-          authStatus.channelThumbnail,
-      },
-    )
-
-  const auditLogs =
-    useOrganizationAuditLogs(
-      workspace,
-      organization,
-    )
-
-  const selectedOrganization =
-    organization.organizations.find(
-      (org) =>
-        org.id === workspace,
-    )
-
+  const selectedOrganization = organization.organizations.find(
+    (org) => org.id === workspace
+  );
 
   const workspaceLabel =
     workspace === "local"
       ? "Personal"
-      : selectedOrganization?.name ??
-      "Select workspace"
+      : (selectedOrganization?.name ?? "Select workspace");
 
-
-  function handleWorkspaceChange(
-    value: string | null,
-  ) {
-    if (
-      value ===
-      CREATE_ORGANIZATION_VALUE
-    ) {
-      setCreateOrganizationOpen(true)
-      return
+  function handleWorkspaceChange(value: string | null) {
+    if (value === CREATE_ORGANIZATION_VALUE) {
+      setCreateOrganizationOpen(true);
+      return;
     }
 
-    setWorkspace(
-      value ?? "local",
-    )
+    selectWorkspace(value ?? "local");
+    if (onboardingStep !== "done") finishOnboarding();
   }
 
-
-  function handleOrganizationCreated(
-    organizationId: string,
-  ) {
-    setWorkspace(
-      organizationId,
-    )
-
-    setPage(
-      "organization",
-    )
+  function selectWorkspace(value: string) {
+    savePreference(WORKSPACE_KEY, value);
+    setRememberedWorkspace(value);
+    setWorkspace(value);
   }
 
+  function chooseOnboarding(step: OnboardingStep) {
+    savePreference(ONBOARDING_KEY, step);
+    setOnboardingStep(step);
+    setPage(step === "join" || step === "create" ? "organization" : "publish");
+  }
+
+  function finishOnboarding() {
+    chooseOnboarding("done");
+  }
+
+  function startPersonalSetup() {
+    selectWorkspace("local");
+    finishOnboarding();
+    setSetupOpen(true);
+  }
+
+  function handleOrganizationCreated(organizationId: string) {
+    selectWorkspace(organizationId);
+    finishOnboarding();
+
+    setPage("organization");
+  }
 
   function handlePublishPage() {
-    setPage("publish")
+    setPage("publish");
   }
-
 
   function handleOrganizationPage() {
-    setPage("organization")
+    setPage("organization");
 
     if (workspace === "local") {
-      void youtube.refresh()
-      return
+      void youtube.refresh();
+      return;
     }
 
-    void organization.refreshWorkspace(
-      workspace,
-    )
+    void organization.refreshWorkspace(workspace);
 
-    void youtube.refresh()
-    void auditLogs.refresh()
+    void youtube.refresh();
+    void auditLogs.refresh();
   }
 
+  useEffect(() => {
+    if (!organization.loading && !organization.session) {
+      setWorkspace("local");
+    }
+  }, [organization.session, organization.loading]);
 
   useEffect(() => {
-    if (!organization.session) {
-      setWorkspace("local")
+    if (
+      organization.loading ||
+      !organization.session ||
+      organization.loadingOrganizations ||
+      organization.organizationError ||
+      organization.organizationsUserId !== organization.session.user.id
+    ) {
+      return;
     }
-  }, [organization.session])
-
-
-  useEffect(() => {
-    if (workspace === "local") {
-      return
-    }
-
-    const exists =
-      organization.organizations.some(
-        (org) =>
-          org.id === workspace,
-      )
-
-    if (!exists) {
-      setWorkspace("local")
-    }
+    const exists = organization.organizations.some(
+      (org) => org.id === rememberedWorkspace
+    );
+    if (rememberedWorkspace === "local" || exists)
+      setWorkspace(rememberedWorkspace);
+    else selectWorkspace("local");
   }, [
     workspace,
+    rememberedWorkspace,
+    organization.loading,
+    organization.session,
+    organization.loadingOrganizations,
+    organization.organizationError,
+    organization.organizationsUserId,
     organization.organizations,
-  ])
-
+  ]);
 
   useEffect(() => {
     function handleFocus() {
       if (page !== "organization") {
-        return
+        return;
       }
 
       if (workspace !== "local") {
-        void organization.refreshWorkspace(
-          workspace,
-        )
+        void organization.refreshWorkspace(workspace);
 
-        void youtube.refresh()
-        void auditLogs.refresh()
-
+        void youtube.refresh();
+        void auditLogs.refresh();
       }
     }
 
-    window.addEventListener(
-      "focus",
-      handleFocus,
-    )
+    window.addEventListener("focus", handleFocus);
 
     return () => {
-      window.removeEventListener(
-        "focus",
-        handleFocus,
-      )
-    }
-  }, [
-    page,
-    workspace,
-    organization.session?.user.id,
-    auditLogs.refresh
-  ])
-
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [page, workspace, organization.session?.user.id, auditLogs.refresh]);
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-
       <header className="bg-background">
         <div className="mx-auto flex max-w-7xl items-center gap-4 px-5 py-3">
-
           <h1 className="mr-auto text-base font-semibold">
             Auto Media Publisher
           </h1>
+          {onboardingStep === "done" && (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => chooseOnboarding("welcome")}
+              >
+                Getting started
+              </Button>
 
-
-          <nav className="flex items-center rounded-lg bg-muted p-1">
-
-            <button
-              type="button"
-              onClick={handlePublishPage}
-              className={`
+              <nav className="flex items-center rounded-lg bg-muted p-1">
+                <button
+                  type="button"
+                  onClick={handlePublishPage}
+                  className={`
                 rounded-md px-3 py-1.5
                 text-sm font-medium
                 transition-colors
-                ${page === "publish"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
+                ${
+                  page === "publish"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
                 }
               `}
-            >
-              Publish
-            </button>
+                >
+                  Publish
+                </button>
 
-
-            <button
-              type="button"
-              onClick={handleOrganizationPage}
-              className={`
+                <button
+                  type="button"
+                  onClick={handleOrganizationPage}
+                  className={`
                 rounded-md px-3 py-1.5
                 text-sm font-medium
                 transition-colors
-                ${page === "organization"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
+                ${
+                  page === "organization"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
                 }
               `}
-            >
-              Organization
-            </button>
+                >
+                  Organization
+                </button>
+              </nav>
 
-          </nav>
-
-
-          <Select
-            value={workspace}
-            onValueChange={
-              handleWorkspaceChange
-            }
-          >
-            <SelectTrigger className="w-52">
-              <SelectValue>
-                <div className="flex items-center gap-2">
-
-                  {workspace === "local" ? (
-                    <UserRound className="size-4 text-muted-foreground" />
-                  ) : (
-                    <Building2 className="size-4 text-muted-foreground" />
-                  )}
-
-
-                  <span className="truncate">
-                    {workspaceLabel}
-                  </span>
-
-                </div>
-              </SelectValue>
-            </SelectTrigger>
-
-
-            <SelectContent>
-
-              <SelectItem value="local">
-                <div className="flex items-center gap-2">
-                  <UserRound className="size-4 text-muted-foreground" />
-
-                  <span>
-                    Personal
-                  </span>
-                </div>
-              </SelectItem>
-
-
-              {organization.organizations.map(
-                (org) => (
-                  <SelectItem
-                    key={org.id}
-                    value={org.id}
-                  >
+              <Select value={workspace} onValueChange={handleWorkspaceChange}>
+                <SelectTrigger className="w-52">
+                  <SelectValue>
                     <div className="flex items-center gap-2">
-                      <Building2 className="size-4 text-muted-foreground" />
+                      {workspace === "local" ? (
+                        <UserRound className="size-4 text-muted-foreground" />
+                      ) : (
+                        <Building2 className="size-4 text-muted-foreground" />
+                      )}
 
-                      <span>
-                        {org.name}
-                      </span>
+                      <span className="truncate">{workspaceLabel}</span>
+                    </div>
+                  </SelectValue>
+                </SelectTrigger>
+
+                <SelectContent>
+                  <SelectItem value="local">
+                    <div className="flex items-center gap-2">
+                      <UserRound className="size-4 text-muted-foreground" />
+
+                      <span>Personal</span>
                     </div>
                   </SelectItem>
-                ),
-              )}
 
+                  {organization.organizations.map((org) => (
+                    <SelectItem key={org.id} value={org.id}>
+                      <div className="flex items-center gap-2">
+                        <Building2 className="size-4 text-muted-foreground" />
 
-              <SelectSeparator />
+                        <span>{org.name}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
 
+                  <SelectSeparator />
 
-              <SelectItem
-                value={
-                  CREATE_ORGANIZATION_VALUE
-                }
-              >
-                <div className="flex items-center gap-2">
-                  <Plus className="size-4 text-muted-foreground" />
+                  <SelectItem value={CREATE_ORGANIZATION_VALUE}>
+                    <div className="flex items-center gap-2">
+                      <Plus className="size-4 text-muted-foreground" />
 
-                  <span>
-                    Create organization
-                  </span>
-                </div>
-              </SelectItem>
-
-            </SelectContent>
-          </Select>
-
+                      <span>Create organization</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </>
+          )}
         </div>
       </header>
 
-
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-5 pb-5">
-
+        {onboardingStep !== "done" && (
+          <WorkspaceOnboarding
+            step={onboardingStep}
+            organization={organization}
+            onPersonal={startPersonalSetup}
+            onChoose={chooseOnboarding}
+            onSelectOrganization={(id) => {
+              selectWorkspace(id);
+              finishOnboarding();
+            }}
+            onCreate={() => setCreateOrganizationOpen(true)}
+            onDismiss={finishOnboarding}
+          />
+        )}
         <div
           className={
-            page === "publish"
-              ? "block"
-              : "hidden"
+            page === "publish" && onboardingStep === "done" ? "block" : "hidden"
           }
         >
           <PublishPage
@@ -362,13 +318,17 @@ function App() {
             importCredentials={importCredentials}
             refreshAuthStatus={refreshAuthStatus}
             youtube={youtube}
+            onOpenOrganization={handleOrganizationPage}
+            setupOpen={setupOpen}
+            onSetupOpenChange={setSetupOpen}
           />
         </div>
 
-
         <div
           className={
-            page === "organization"
+            page === "organization" &&
+            onboardingStep !== "welcome" &&
+            (onboardingStep === "done" || !organization.session)
               ? "block"
               : "hidden"
           }
@@ -381,24 +341,16 @@ function App() {
             auditLogs={auditLogs}
           />
         </div>
-
       </div>
-
 
       <CreateOrganizationDialog
         open={createOrganizationOpen}
-        onOpenChange={
-          setCreateOrganizationOpen
-        }
+        onOpenChange={setCreateOrganizationOpen}
         organization={organization}
-        onCreated={
-          handleOrganizationCreated
-        }
+        onCreated={handleOrganizationCreated}
       />
-
     </main>
-  )
+  );
 }
 
-
-export default App
+export default App;

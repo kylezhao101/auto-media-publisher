@@ -13,8 +13,9 @@ export function useAuthStatus() {
     };
 
     const importCredentials = async () => {
-        await window.electronAPI.importCredentials();
+        const result = await window.electronAPI.importCredentials();
         await refreshAuthStatus();
+        return result.success;
     };
 
     useEffect(() => {

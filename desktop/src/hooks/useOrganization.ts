@@ -1,602 +1,461 @@
-import {
-    useEffect,
-    useRef,
-    useState,
-} from "react"
+import { useEffect, useRef, useState } from "react";
 
-import { useAuth } from "./useAuth"
+import { useAuth } from "./useAuth";
 
 import {
-    getOrganizations,
-    createOrganization as createOrganizationRequest,
-    deleteOrganization as deleteOrganizationRequest,
-    getOrganizationMembers,
-    updateOrganizationMemberRole,
-    removeOrganizationMember,
-    leaveOrganization,
-    getOrganizationInvitations,
-    createOrganizationInvitation,
-    revokeOrganizationInvitation,
-
-    type Organization,
-    type OrganizationMember,
-    type OrganizationRole,
-    type OrganizationInvitation,
-} from "../api/organizations"
+  getOrganizations,
+  createOrganization as createOrganizationRequest,
+  deleteOrganization as deleteOrganizationRequest,
+  getOrganizationMembers,
+  updateOrganizationMemberRole,
+  removeOrganizationMember,
+  leaveOrganization,
+  getOrganizationInvitations,
+  createOrganizationInvitation,
+  revokeOrganizationInvitation,
+  type Organization,
+  type OrganizationMember,
+  type OrganizationRole,
+  type OrganizationInvitation,
+} from "../api/organizations";
 
 import {
-    getOrganizationPresets,
-    createOrganizationPreset,
-    updateOrganizationPreset,
-    deleteOrganizationPreset,
+  getOrganizationPresets,
+  createOrganizationPreset,
+  updateOrganizationPreset,
+  deleteOrganizationPreset,
+  type OrganizationPreset,
+  type CreatePresetInput,
+  type UpdatePresetInput,
+} from "../api/presets";
 
-    type OrganizationPreset,
-    type CreatePresetInput,
-    type UpdatePresetInput,
-} from "../api/presets"
-
-
-export type OrganizationState =
-    ReturnType<typeof useOrganization>
-
+export type OrganizationState = ReturnType<typeof useOrganization>;
 
 export function useOrganization() {
-    const auth = useAuth()
+  const auth = useAuth();
 
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
 
-    const [organizations, setOrganizations] =
-        useState<Organization[]>([])
+  const [loadingOrganizations, setLoadingOrganizations] = useState(false);
 
-    const [loadingOrganizations, setLoadingOrganizations] =
-        useState(false)
+  const [organizationError, setOrganizationError] = useState<string | null>(
+    null
+  );
+  const [organizationsUserId, setOrganizationsUserId] = useState<string | null>(
+    null
+  );
 
-    const [organizationError, setOrganizationError] =
-        useState<string | null>(null)
+  const [members, setMembers] = useState<OrganizationMember[]>([]);
 
+  const [loadingMembers, setLoadingMembers] = useState(false);
 
-    const [members, setMembers] =
-        useState<OrganizationMember[]>([])
+  const [membersError, setMembersError] = useState<string | null>(null);
 
-    const [loadingMembers, setLoadingMembers] =
-        useState(false)
+  const [invitations, setInvitations] = useState<OrganizationInvitation[]>([]);
 
-    const [membersError, setMembersError] =
-        useState<string | null>(null)
+  const [loadingInvitations, setLoadingInvitations] = useState(false);
 
+  const [invitationsError, setInvitationsError] = useState<string | null>(null);
 
-    const [invitations, setInvitations] =
-        useState<OrganizationInvitation[]>([])
+  const [presets, setPresets] = useState<OrganizationPreset[]>([]);
 
-    const [loadingInvitations, setLoadingInvitations] =
-        useState(false)
+  const [loadingPresets, setLoadingPresets] = useState(false);
 
-    const [invitationsError, setInvitationsError] =
-        useState<string | null>(null)
+  const [presetsError, setPresetsError] = useState<string | null>(null);
 
-    const [presets, setPresets] =
-        useState<OrganizationPreset[]>([])
+  /*
+   * Prevent multiple parts of the UI from refreshing
+   * the same workspace simultaneously.
+   */
+  const workspaceRefreshPromise = useRef<Promise<void> | null>(null);
 
-    const [loadingPresets, setLoadingPresets] =
-        useState(false)
+  const lastWorkspaceRefresh = useRef(0);
 
-    const [presetsError, setPresetsError] =
-        useState<string | null>(null)
+  async function loadOrganizations() {
+    if (!auth.session) {
+      setOrganizations([]);
+      return;
+    }
 
+    setLoadingOrganizations(true);
+    setOrganizationError(null);
+
+    try {
+      const organizations = await getOrganizations(auth.session.access_token);
+
+      setOrganizations(organizations);
+      setOrganizationsUserId(auth.session.user.id);
+    } catch (error) {
+      setOrganizationError(
+        error instanceof Error ? error.message : "Failed to load organizations"
+      );
+    } finally {
+      setLoadingOrganizations(false);
+    }
+  }
+
+  async function createOrganization(name: string) {
+    if (!auth.session) {
+      throw new Error("Not signed in");
+    }
+
+    const organization = await createOrganizationRequest(
+      name,
+      auth.session.access_token
+    );
+
+    setOrganizations((current) => [...current, organization]);
+
+    return organization;
+  }
+
+  async function loadMembers(organizationId: string) {
+    if (!auth.session) {
+      setMembers([]);
+      return;
+    }
+
+    setLoadingMembers(true);
+
+    try {
+      const members = await getOrganizationMembers(
+        organizationId,
+        auth.session.access_token
+      );
+
+      setMembers(members);
+
+      // Only clear the previous error
+      // after a successful request.
+      setMembersError(null);
+    } catch (error) {
+      setMembersError(
+        error instanceof Error
+          ? error.message
+          : "Failed to load organization members"
+      );
+    } finally {
+      setLoadingMembers(false);
+    }
+  }
+
+  async function loadInvitations(organizationId: string) {
+    if (!auth.session) {
+      setInvitations([]);
+      return;
+    }
+
+    setLoadingInvitations(true);
+
+    try {
+      const invitations = await getOrganizationInvitations(
+        organizationId,
+        auth.session.access_token
+      );
+
+      setInvitations(invitations);
+
+      // Only clear the previous error
+      // after a successful request.
+      setInvitationsError(null);
+    } catch (error) {
+      setInvitationsError(
+        error instanceof Error ? error.message : "Failed to load invitations"
+      );
+    } finally {
+      setLoadingInvitations(false);
+    }
+  }
+
+  async function refreshWorkspace(
+    organizationId: string,
+    options?: {
+      force?: boolean;
+    }
+  ) {
+    if (!auth.session) {
+      return;
+    }
 
     /*
-     * Prevent multiple parts of the UI from refreshing
-     * the same workspace simultaneously.
+     * If another refresh is already running,
+     * reuse it instead of sending duplicate requests.
      */
-    const workspaceRefreshPromise =
-        useRef<Promise<void> | null>(null)
-
-    const lastWorkspaceRefresh =
-        useRef(0)
-
-
-    async function loadOrganizations() {
-        if (!auth.session) {
-            setOrganizations([])
-            return
-        }
-
-        setLoadingOrganizations(true)
-        setOrganizationError(null)
-
-        try {
-            const organizations =
-                await getOrganizations(
-                    auth.session.access_token,
-                )
-
-            setOrganizations(
-                organizations,
-            )
-        } catch (error) {
-            setOrganizationError(
-                error instanceof Error
-                    ? error.message
-                    : "Failed to load organizations",
-            )
-        } finally {
-            setLoadingOrganizations(false)
-        }
+    if (workspaceRefreshPromise.current) {
+      return workspaceRefreshPromise.current;
     }
 
-    async function createOrganization(
-        name: string,
-    ) {
-        if (!auth.session) {
-            throw new Error("Not signed in")
-        }
+    /*
+     * Focus can fire several times when switching
+     * between Electron, DevTools and other windows.
+     *
+     * Ignore duplicate automatic refreshes that happen
+     * within 1.5 seconds.
+     */
+    const now = Date.now();
 
-        const organization =
-            await createOrganizationRequest(
-                name,
-                auth.session.access_token,
-            )
-
-        setOrganizations((current) => [
-            ...current,
-            organization,
-        ])
-
-        return organization
+    if (!options?.force && now - lastWorkspaceRefresh.current < 1500) {
+      return;
     }
 
-    async function loadMembers(
-        organizationId: string,
-    ) {
-        if (!auth.session) {
-            setMembers([])
-            return
-        }
+    lastWorkspaceRefresh.current = now;
 
-        setLoadingMembers(true)
+    const refreshPromise = Promise.all([
+      loadMembers(organizationId),
 
-        try {
-            const members =
-                await getOrganizationMembers(
-                    organizationId,
-                    auth.session.access_token,
-                )
+      loadInvitations(organizationId),
 
-            setMembers(members)
+      loadPresets(organizationId),
+    ]).then(() => undefined);
 
-            // Only clear the previous error
-            // after a successful request.
-            setMembersError(null)
+    workspaceRefreshPromise.current = refreshPromise;
 
-        } catch (error) {
-            setMembersError(
-                error instanceof Error
-                    ? error.message
-                    : "Failed to load organization members",
-            )
-        } finally {
-            setLoadingMembers(false)
-        }
+    try {
+      await refreshPromise;
+    } finally {
+      workspaceRefreshPromise.current = null;
+    }
+  }
+
+  async function updateMemberRole(
+    organizationId: string,
+    memberUserId: string,
+    role: OrganizationRole
+  ) {
+    if (!auth.session) {
+      throw new Error("Not signed in");
     }
 
+    const updated = await updateOrganizationMemberRole(
+      organizationId,
+      memberUserId,
+      role,
+      auth.session.access_token
+    );
 
-    async function loadInvitations(
-        organizationId: string,
-    ) {
-        if (!auth.session) {
-            setInvitations([])
-            return
-        }
+    setMembers((current) =>
+      current.map((member) =>
+        member.user_id === updated.user_id ? updated : member
+      )
+    );
+  }
 
-        setLoadingInvitations(true)
-
-        try {
-            const invitations =
-                await getOrganizationInvitations(
-                    organizationId,
-                    auth.session.access_token,
-                )
-
-            setInvitations(
-                invitations,
-            )
-
-            // Only clear the previous error
-            // after a successful request.
-            setInvitationsError(null)
-
-        } catch (error) {
-            setInvitationsError(
-                error instanceof Error
-                    ? error.message
-                    : "Failed to load invitations",
-            )
-        } finally {
-            setLoadingInvitations(false)
-        }
+  async function removeMember(organizationId: string, memberUserId: string) {
+    if (!auth.session) {
+      throw new Error("Not signed in");
     }
 
+    await removeOrganizationMember(
+      organizationId,
+      memberUserId,
+      auth.session.access_token
+    );
 
-    async function refreshWorkspace(
-        organizationId: string,
-        options?: {
-            force?: boolean
-        },
-    ) {
-        if (!auth.session) {
-            return
-        }
+    setMembers((current) =>
+      current.filter((member) => member.user_id !== memberUserId)
+    );
+  }
 
-
-        /*
-         * If another refresh is already running,
-         * reuse it instead of sending duplicate requests.
-         */
-        if (workspaceRefreshPromise.current) {
-            return workspaceRefreshPromise.current
-        }
-
-
-        /*
-         * Focus can fire several times when switching
-         * between Electron, DevTools and other windows.
-         *
-         * Ignore duplicate automatic refreshes that happen
-         * within 1.5 seconds.
-         */
-        const now = Date.now()
-
-        if (
-            !options?.force &&
-            now - lastWorkspaceRefresh.current < 1500
-        ) {
-            return
-        }
-
-
-        lastWorkspaceRefresh.current = now
-
-
-        const refreshPromise = Promise.all([
-            loadMembers(
-                organizationId,
-            ),
-
-            loadInvitations(
-                organizationId,
-            ),
-
-            loadPresets(
-                organizationId,
-            )
-        ]).then(() => undefined)
-
-
-        workspaceRefreshPromise.current =
-            refreshPromise
-
-
-        try {
-            await refreshPromise
-        } finally {
-            workspaceRefreshPromise.current =
-                null
-        }
+  async function leave(organizationId: string) {
+    if (!auth.session) {
+      throw new Error("Not signed in");
     }
 
+    await leaveOrganization(organizationId, auth.session.access_token);
 
-    async function updateMemberRole(
-        organizationId: string,
-        memberUserId: string,
-        role: OrganizationRole,
-    ) {
-        if (!auth.session) {
-            throw new Error(
-                "Not signed in",
-            )
-        }
+    await loadOrganizations();
+  }
 
-        const updated =
-            await updateOrganizationMemberRole(
-                organizationId,
-                memberUserId,
-                role,
-                auth.session.access_token,
-            )
-
-        setMembers((current) =>
-            current.map((member) =>
-                member.user_id ===
-                    updated.user_id
-                    ? updated
-                    : member,
-            ),
-        )
+  async function inviteMember(
+    organizationId: string,
+    email: string,
+    role: OrganizationRole
+  ) {
+    if (!auth.session) {
+      throw new Error("Not signed in");
     }
 
+    const invitation = await createOrganizationInvitation(
+      organizationId,
+      email,
+      role,
+      auth.session.access_token
+    );
 
-    async function removeMember(
-        organizationId: string,
-        memberUserId: string,
-    ) {
-        if (!auth.session) {
-            throw new Error(
-                "Not signed in",
-            )
-        }
+    setInvitations((current) => [...current, invitation]);
 
-        await removeOrganizationMember(
-            organizationId,
-            memberUserId,
-            auth.session.access_token,
-        )
+    return invitation;
+  }
 
-        setMembers((current) =>
-            current.filter(
-                (member) =>
-                    member.user_id !==
-                    memberUserId,
-            ),
-        )
+  async function revokeInvitation(
+    organizationId: string,
+    invitationId: string
+  ) {
+    if (!auth.session) {
+      throw new Error("Not signed in");
     }
 
+    await revokeOrganizationInvitation(
+      organizationId,
+      invitationId,
+      auth.session.access_token
+    );
 
-    async function leave(
-        organizationId: string,
-    ) {
-        if (!auth.session) {
-            throw new Error(
-                "Not signed in",
-            )
-        }
+    setInvitations((current) =>
+      current.filter((invitation) => invitation.id !== invitationId)
+    );
+  }
 
-        await leaveOrganization(
-            organizationId,
-            auth.session.access_token,
-        )
-
-        await loadOrganizations()
+  async function loadPresets(organizationId: string) {
+    if (!auth.session) {
+      setPresets([]);
+      return;
     }
 
+    setLoadingPresets(true);
 
-    async function inviteMember(
-        organizationId: string,
-        email: string,
-        role: OrganizationRole,
-    ) {
-        if (!auth.session) {
-            throw new Error(
-                "Not signed in",
-            )
-        }
+    try {
+      const presets = await getOrganizationPresets(
+        organizationId,
+        auth.session.access_token
+      );
 
-        const invitation =
-            await createOrganizationInvitation(
-                organizationId,
-                email,
-                role,
-                auth.session.access_token,
-            )
+      setPresets(presets);
+      setPresetsError(null);
+    } catch (error) {
+      setPresetsError(
+        error instanceof Error ? error.message : "Failed to load presets"
+      );
+    } finally {
+      setLoadingPresets(false);
+    }
+  }
 
-        setInvitations(
-            (current) => [
-                ...current,
-                invitation,
-            ],
-        )
-
-        return invitation
+  async function createPreset(
+    organizationId: string,
+    input: CreatePresetInput
+  ) {
+    if (!auth.session) {
+      throw new Error("Not signed in");
     }
 
+    const preset = await createOrganizationPreset(
+      organizationId,
+      input,
+      auth.session.access_token
+    );
 
-    async function revokeInvitation(
-        organizationId: string,
-        invitationId: string,
-    ) {
-        if (!auth.session) {
-            throw new Error(
-                "Not signed in",
-            )
-        }
+    setPresets((current) => [...current, preset]);
 
-        await revokeOrganizationInvitation(
-            organizationId,
-            invitationId,
-            auth.session.access_token,
-        )
+    return preset;
+  }
 
-        setInvitations((current) =>
-            current.filter(
-                (invitation) =>
-                    invitation.id !==
-                    invitationId,
-            ),
-        )
+  async function updatePreset(
+    organizationId: string,
+    presetId: string,
+    input: UpdatePresetInput
+  ) {
+    if (!auth.session) {
+      throw new Error("Not signed in");
     }
 
-    async function loadPresets(
-        organizationId: string,
-    ) {
-        if (!auth.session) {
-            setPresets([])
-            return
-        }
+    const updated = await updateOrganizationPreset(
+      organizationId,
+      presetId,
+      input,
+      auth.session.access_token
+    );
 
-        setLoadingPresets(true)
+    setPresets((current) =>
+      current.map((preset) => (preset.id === updated.id ? updated : preset))
+    );
 
-        try {
-            const presets =
-                await getOrganizationPresets(
-                    organizationId,
-                    auth.session.access_token,
-                )
+    return updated;
+  }
 
-            setPresets(presets)
-            setPresetsError(null)
-        } catch (error) {
-            setPresetsError(
-                error instanceof Error
-                    ? error.message
-                    : "Failed to load presets",
-            )
-        } finally {
-            setLoadingPresets(false)
-        }
+  async function deletePreset(organizationId: string, presetId: string) {
+    if (!auth.session) {
+      throw new Error("Not signed in");
     }
 
+    await deleteOrganizationPreset(
+      organizationId,
+      presetId,
+      auth.session.access_token
+    );
 
-    async function createPreset(
-        organizationId: string,
-        input: CreatePresetInput,
-    ) {
-        if (!auth.session) {
-            throw new Error("Not signed in")
-        }
+    setPresets((current) => current.filter((preset) => preset.id !== presetId));
+  }
 
-        const preset =
-            await createOrganizationPreset(
-                organizationId,
-                input,
-                auth.session.access_token,
-            )
-
-        setPresets((current) => [
-            ...current,
-            preset,
-        ])
-
-        return preset
+  async function deleteOrganization(organizationId: string) {
+    if (!auth.session) {
+      throw new Error("Not signed in");
     }
 
+    await deleteOrganizationRequest(organizationId, auth.session.access_token);
 
-    async function updatePreset(
-        organizationId: string,
-        presetId: string,
-        input: UpdatePresetInput,
-    ) {
-        if (!auth.session) {
-            throw new Error("Not signed in")
-        }
+    setOrganizations((current) =>
+      current.filter((organization) => organization.id !== organizationId)
+    );
 
-        const updated =
-            await updateOrganizationPreset(
-                organizationId,
-                presetId,
-                input,
-                auth.session.access_token,
-            )
+    setMembers([]);
+    setInvitations([]);
+    setPresets([]);
+  }
 
-        setPresets((current) =>
-            current.map((preset) =>
-                preset.id === updated.id
-                    ? updated
-                    : preset,
-            ),
-        )
-
-        return updated
+  useEffect(() => {
+    if (!auth.session) {
+      setOrganizationsUserId(null);
+      setOrganizations([]);
+      setMembers([]);
+      setInvitations([]);
+      setPresets([]);
+      return;
     }
 
+    void loadOrganizations();
+  }, [auth.session?.user.id]);
 
-    async function deletePreset(
-        organizationId: string,
-        presetId: string,
-    ) {
-        if (!auth.session) {
-            throw new Error("Not signed in")
-        }
+  return {
+    ...auth,
 
-        await deleteOrganizationPreset(
-            organizationId,
-            presetId,
-            auth.session.access_token,
-        )
+    organizations,
+    loadingOrganizations,
+    organizationError,
+    organizationsUserId,
 
-        setPresets((current) =>
-            current.filter(
-                (preset) =>
-                    preset.id !== presetId,
-            ),
-        )
-    }
+    members,
+    loadingMembers,
+    membersError,
 
-    async function deleteOrganization(
-        organizationId: string,
-    ) {
-        if (!auth.session) {
-            throw new Error("Not signed in")
-        }
+    invitations,
+    loadingInvitations,
+    invitationsError,
 
-        await deleteOrganizationRequest(
-            organizationId,
-            auth.session.access_token,
-        )
+    presets,
+    loadingPresets,
+    presetsError,
 
-        setOrganizations((current) =>
-            current.filter(
-                (organization) =>
-                    organization.id !== organizationId,
-            ),
-        )
+    refreshOrganizations: loadOrganizations,
 
-        setMembers([])
-        setInvitations([])
-        setPresets([])
-    }
+    createOrganization,
+    deleteOrganization,
 
+    loadMembers,
+    loadInvitations,
+    loadPresets,
 
-    useEffect(() => {
-        if (!auth.session) {
-            setOrganizations([])
-            setMembers([])
-            setInvitations([])
-            setPresets([])
-            return
-        }
+    refreshWorkspace,
 
-        void loadOrganizations()
+    updateMemberRole,
+    removeMember,
+    leaveOrganization: leave,
 
-    }, [auth.session?.user.id])
+    inviteMember,
+    revokeInvitation,
 
-
-    return {
-        ...auth,
-
-        organizations,
-        loadingOrganizations,
-        organizationError,
-
-        members,
-        loadingMembers,
-        membersError,
-
-        invitations,
-        loadingInvitations,
-        invitationsError,
-
-        presets,
-        loadingPresets,
-        presetsError,
-
-        refreshOrganizations: loadOrganizations,
-
-        createOrganization,
-        deleteOrganization,
-
-        loadMembers,
-        loadInvitations,
-        loadPresets,
-
-        refreshWorkspace,
-
-        updateMemberRole,
-        removeMember,
-        leaveOrganization: leave,
-
-        inviteMember,
-        revokeInvitation,
-
-        createPreset,
-        updatePreset,
-        deletePreset,
-    }
+    createPreset,
+    updatePreset,
+    deletePreset,
+  };
 }
