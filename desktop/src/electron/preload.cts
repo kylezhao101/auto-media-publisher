@@ -8,11 +8,19 @@ contextBridge.exposeInMainWorld("electronAPI", {
   selectThumbnail: () => ipcRenderer.invoke("select-thumbnail"),
   startJob: (payload: any) => ipcRenderer.invoke("start-job", payload),
   onJobProgress: (callback: (msg: any) => void) => {
-    ipcRenderer.on("job-progress", (_event: any, msg: any) => {
+    const listener = (_event: any, msg: any) => {
       callback(msg);
-    });
-    return () => ipcRenderer.removeAllListeners("job-progress");
+    };
+    ipcRenderer.on("job-progress", listener);
+    return () => ipcRenderer.removeListener("job-progress", listener);
   },
+  onYouTubeTokenRequest: (callback: (request: any) => void) => {
+    const listener = (_event: any, request: any) => callback(request);
+    ipcRenderer.on("youtube-token-request", listener);
+    return () => ipcRenderer.removeListener("youtube-token-request", listener);
+  },
+  respondYouTubeToken: (response: any) =>
+    ipcRenderer.invoke("youtube-token-response", response),
   listRenders: () => ipcRenderer.invoke("list-renders"),
   cancelJob: () => ipcRenderer.invoke("cancel-job"),
   uploadExisting: (payload: any) =>
