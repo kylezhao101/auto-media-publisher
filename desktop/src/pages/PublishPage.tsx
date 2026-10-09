@@ -82,10 +82,7 @@ import type { OrganizationState } from "../hooks/useOrganization";
 
 import type { AuthStatus } from "@/types/amp";
 import type { YouTubeConnectionState } from "@/hooks/useYoutubeConnection";
-import {
-  getOrganizationYouTubePlaylists,
-  createOrganizationYouTubeUploadSession,
-} from "@/api/youtube";
+import { getOrganizationYouTubePlaylists } from "@/api/youtube";
 
 type PublishPageProps = {
   workspace: string;
@@ -265,14 +262,10 @@ export function PublishPage({
       throw new Error("YouTube is not connected for this organization.");
     }
 
-    const uploadSession = await createOrganizationYouTubeUploadSession(
-      workspace,
-      organization.session.access_token
-    );
-
     return {
-      type: "access_token",
-      access_token: uploadSession.access_token,
+      type: "organization",
+      organization_id: workspace,
+      user_id: organization.session.user.id,
     };
   }
 

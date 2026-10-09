@@ -77,6 +77,7 @@ def get_local_youtube_client():
 
 def get_youtube_client(
     youtube_auth: dict | None = None,
+    token_provider=None,
 ):
     youtube_auth = youtube_auth or {
         "type": "local",
@@ -88,6 +89,13 @@ def get_youtube_client(
 
     if auth_type == "local":
         return get_local_youtube_client()
+
+    if auth_type == "organization":
+        if token_provider is None:
+            raise RuntimeError("Organization token provider is missing")
+        creds = Credentials(token=None, scopes=YOUTUBE_SCOPES, refresh_handler=token_provider)
+        creds.refresh(Request())
+        return build("youtube", "v3", credentials=creds)
 
     if auth_type == "access_token":
         access_token = youtube_auth.get("access_token")
@@ -155,9 +163,11 @@ def upload_video(
     playlist_ids: list[str] | None = None,
     youtube_auth: dict | None = None,
     on_progress=None,
+    token_provider=None,
 ) -> str:
     youtube = get_youtube_client(
         youtube_auth,
+        token_provider=token_provider,
     )
 
     playlist_ids = playlist_ids or []

@@ -16,6 +16,7 @@ from youtube import (
     get_channel,
 )
 from logger import setup_logger
+from token_broker import TokenBroker
 
 logger = setup_logger()
 
@@ -43,7 +44,7 @@ def main():
     stage = "startup"
 
     try:
-        job = json.loads(sys.stdin.read())
+        job = json.loads(sys.stdin.readline())
 
         youtube_auth = job.get(
             "youtube_auth",
@@ -120,6 +121,7 @@ def main():
             f"Upload started title={title} visibility={visibility} playlists={len(playlist_ids)}"
         )
         stage = "uploading"
+        token_broker = TokenBroker() if youtube_auth.get("type") == "organization" else None
         video_id = upload_video(
             output_path,
             title,
@@ -128,6 +130,7 @@ def main():
             visibility=visibility,
             playlist_ids=playlist_ids,
             youtube_auth=youtube_auth,
+            token_provider=token_broker.refresh if token_broker else None,
             on_progress=lambda p: emit({"stage": "uploading", "percent": p}),
         )
         logger.info(f"Upload completed video_id={video_id}")

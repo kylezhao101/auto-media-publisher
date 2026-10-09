@@ -19,6 +19,9 @@ import {
   getLogDir,
 } from "./../helpers/paths.js";
 import { ChildProcess, spawn } from "child_process";
+import { createInterface } from "readline";
+import { WorkerTokens } from "../helpers/workerTokens.js";
+import type { YouTubeTokenResponse } from "../vite-env.js";
 import type { EncoderCapabilities, PerformanceMode } from "../vite-env.js";
 
 if (process.defaultApp) {
@@ -80,6 +83,7 @@ const getTokenBin = isDev
 const getTokenArgs = isDev ? [path.join(workerDir, "get_token.py")] : [];
 
 let currentJob: ChildProcess | null = null;
+let currentTokens: WorkerTokens | null = null;
 let mainWindow: BrowserWindow | null = null;
 
 const getWindowTitle = () => `Auto Media Publisher v${app.getVersion()}`;
@@ -554,6 +558,7 @@ ipcMain.handle("list-playlists", async () => {
 });
 
 ipcMain.handle("start-job", async (event, payload) => {
+  if (currentJob) throw new Error("A publishing job is already running.");
   const {
     clips,
     thumbnail,
@@ -589,8 +594,11 @@ ipcMain.handle("start-job", async (event, payload) => {
    * Organization publishing receives only
    * a short-lived Google access token.
    */
-  if (youtubeAuth.type === "access_token" && !youtubeAuth.access_token) {
-    throw new Error("Organization YouTube access token is missing.");
+  if (
+    youtubeAuth.type === "organization" &&
+    (!youtubeAuth.organization_id || !youtubeAuth.user_id || !payload.job_id)
+  ) {
+    throw new Error("Organization job identity is missing.");
   }
 
   const outputDir = path.join(app.getPath("videos"), "Auto Media Publisher");
@@ -662,6 +670,7 @@ ipcMain.handle("start-job", async (event, payload) => {
 
   preparePackagedBinary(workerBin);
 
+  if (currentJob) throw new Error("A publishing job is already running.");
   const child = spawn(workerBin, workerArgs, {
     cwd: workerCwd,
 
@@ -669,17 +678,38 @@ ipcMain.handle("start-job", async (event, payload) => {
   });
 
   currentJob = child;
-
-  child.stdin.write(job);
-
-  child.stdin.end();
-
-  child.stdout.on("data", (data: Buffer) => {
-    for (const line of data.toString().trim().split("\n")) {
-      try {
-        event.sender.send("job-progress", JSON.parse(line));
-      } catch {}
+  const tokens = new WorkerTokens(
+    payload.job_id,
+    event.sender.id,
+    (message) => {
+      if (!child.stdin.destroyed)
+        child.stdin.write(JSON.stringify(message) + "\n");
+    },
+    (request) => {
+      if (!event.sender.isDestroyed())
+        event.sender.send("youtube-token-request", request);
     }
+  );
+  currentTokens = tokens;
+  // Keep stdin open for organization token responses. Auxiliary worker commands
+  // still work with a single JSON payload followed by EOF.
+  child.stdin.on("error", () => {});
+  child.stdin.write(job + "\n");
+  if (youtubeAuth.type !== "organization") child.stdin.end();
+  const lines = createInterface({ input: child.stdout });
+  lines.on("line", (line) => {
+    try {
+      const message = JSON.parse(line);
+      if (
+        message.type === "token-request" &&
+        youtubeAuth.type === "organization" &&
+        typeof message.request_id === "string"
+      ) {
+        tokens.request(message.request_id);
+      } else if (!event.sender.isDestroyed()) {
+        event.sender.send("job-progress", message);
+      }
+    } catch {}
   });
 
   let stderr = "";
@@ -693,8 +723,18 @@ ipcMain.handle("start-job", async (event, payload) => {
   });
 
   return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      tokens.close();
+      lines.close();
+      if (currentJob === child) currentJob = null;
+      if (currentTokens === tokens) currentTokens = null;
+    };
+    child.on("error", (error) => {
+      cleanup();
+      reject(error);
+    });
     child.on("close", (code) => {
-      currentJob = null;
+      cleanup();
 
       if (code === 0) {
         resolve({
@@ -706,6 +746,13 @@ ipcMain.handle("start-job", async (event, payload) => {
     });
   });
 });
+
+ipcMain.handle(
+  "youtube-token-response",
+  (event, response: YouTubeTokenResponse) => {
+    currentTokens?.respond(event.sender.id, response);
+  }
+);
 
 ipcMain.handle("list-renders", async () => {
   const outputDir = path.join(app.getPath("videos"), "Auto Media Publisher");
@@ -728,9 +775,10 @@ ipcMain.handle("list-renders", async () => {
 });
 
 ipcMain.handle("cancel-job", async () => {
+  currentTokens?.close();
+  currentTokens = null;
   if (currentJob) {
     currentJob.kill("SIGTERM");
-    currentJob = null;
     return { success: true };
   }
 

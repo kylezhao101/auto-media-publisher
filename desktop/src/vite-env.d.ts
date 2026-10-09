@@ -47,11 +47,20 @@ export type YouTubeAuth =
       type: "local";
     }
   | {
-      type: "access_token";
-      access_token: string;
+      type: "organization";
+      organization_id: string;
+      user_id: string;
     };
 
+export type YouTubeTokenRequest = { jobId: string; requestId: string };
+export type YouTubeTokenResponse = YouTubeTokenRequest & {
+  access_token?: string;
+  expires_at?: string;
+  error?: string;
+};
+
 type StartJobPayload = {
+  job_id: string;
   mode?: "render-and-upload" | "upload-existing";
   clips: string[];
   thumbnail: Thumbnail | null;
@@ -77,6 +86,10 @@ declare global {
       selectThumbnail: () => Promise<Thumbnail | null>;
       startJob: (payload: StartJobPayload) => Promise<{ success: boolean }>;
       onJobProgress: (callback: (msg: JobProgress) => void) => () => void;
+      onYouTubeTokenRequest: (
+        callback: (request: YouTubeTokenRequest) => void
+      ) => () => void;
+      respondYouTubeToken: (response: YouTubeTokenResponse) => Promise<void>;
       listRenders: () => Promise<RenderedVideo[]>;
       cancelJob: () => Promise<{ success: boolean }>;
       getCredentialsStatus: () => Promise<{ exists: boolean; path?: string }>;
