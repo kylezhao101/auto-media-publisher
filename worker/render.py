@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import os
+import logging
 import re
 import subprocess
 from pathlib import Path
 import sys
+from collections import deque
 
 
 def get_media_tool_path(env_name: str, default_name: str) -> str:
@@ -88,18 +90,103 @@ def stop_render() -> None:
     ffmpeg_process = None
 
 
-def get_video_args(encoder: str, performance_mode: str) -> list[str]:
+def resolve_encoder(encoder: str) -> str:
+    """Resolve saved GPU selections without assuming hardware availability."""
     if encoder == "gpu":
         if sys.platform == "darwin":
-            return get_videotoolbox_args(performance_mode)
-
+            return "videotoolbox"
         if sys.platform == "win32":
-            return get_nvenc_args(performance_mode)
+            return "nvenc"
+        return "cpu"
 
-        # Linux or unsupported GPU platform
-        return get_cpu_args(performance_mode)
+    if encoder not in {"cpu", "nvenc", "amf", "qsv", "videotoolbox"}:
+        raise ValueError(
+            f"Unsupported encoder: {encoder!r}. "
+            "Choose cpu, nvenc, amf, qsv, or videotoolbox."
+        )
+    return encoder
 
-    return get_cpu_args(performance_mode)
+
+def get_video_args(encoder: str, performance_mode: str) -> list[str]:
+    builders = {
+        "cpu": get_cpu_args,
+        "nvenc": get_nvenc_args,
+        "amf": get_amf_args,
+        "qsv": get_qsv_args,
+        "videotoolbox": get_videotoolbox_args,
+    }
+    return builders[resolve_encoder(encoder)](performance_mode)
+
+
+def detect_encoders(performance_mode: str = "balanced") -> dict:
+    """List build capabilities, then check hardware with a short real encode."""
+    validate_media_tool("FFmpeg", FFMPEG_PATH)
+    listing = subprocess.run(
+        [FFMPEG_PATH, "-hide_banner", "-encoders"],
+        capture_output=True, text=True, check=True, timeout=10,
+    )
+    compiled = set(re.findall(r"^\s*V\S{5}\s+(\S+)", listing.stdout, re.MULTILINE))
+    candidates = [("cpu", "CPU / x264", "libx264")]
+    if sys.platform == "darwin":
+        candidates.append(("videotoolbox", "Apple / VideoToolbox", "h264_videotoolbox"))
+    else:
+        candidates.extend([
+            ("nvenc", "NVIDIA / NVENC", "h264_nvenc"),
+            ("amf", "AMD / AMF", "h264_amf"),
+            ("qsv", "Intel / Quick Sync", "h264_qsv"),
+        ])
+    results = []
+    for encoder, label, codec in candidates:
+        available = False
+        reason = "Not included in this FFmpeg build."
+        if codec in compiled:
+            try:
+                probe = subprocess.run(
+                    [FFMPEG_PATH, "-hide_banner", "-v", "error", "-f", "lavfi",
+                     "-i", "color=c=black:s=1280x720:r=30", "-frames:v", "3",
+                     *get_video_args(encoder, performance_mode), "-f", "null", "-"],
+                    capture_output=True, text=True, timeout=10,
+                )
+                available = probe.returncode == 0
+                if not available:
+                    logging.getLogger("worker").info(
+                        "Encoder probe failed encoder=%s performance_mode=%s: %s",
+                        encoder, performance_mode, probe.stderr.strip(),
+                    )
+                reason = None if available else (
+                    "Hardware or driver could not initialize."
+                    if encoder != "cpu" else "CPU encoding test failed."
+                )
+            except subprocess.TimeoutExpired:
+                reason = "Encoding test timed out."
+                logging.getLogger("worker").info("Encoder probe timed out encoder=%s", encoder)
+        results.append({"id": encoder, "label": label, "available": available, "reason": reason})
+    preferred = next((item["id"] for item in results if item["available"] and item["id"] != "cpu"), None)
+    if preferred is None:
+        preferred = next((item["id"] for item in results if item["available"]), None)
+    return {"encoders": results, "preferred": preferred}
+
+
+def get_amf_args(performance_mode: str) -> list[str]:
+    quality, bitrate, maxrate, bufsize = {
+        "fast": ("speed", "8M", "12M", "16M"),
+        "low": ("quality", "5M", "7M", "10M"),
+    }.get(performance_mode, ("balanced", "6M", "8M", "12M"))
+    return [
+        "-c:v", "h264_amf", "-quality", quality, "-rc", "vbr_peak",
+        "-b:v", bitrate, "-maxrate", maxrate, "-bufsize", bufsize,
+    ]
+
+
+def get_qsv_args(performance_mode: str) -> list[str]:
+    preset, bitrate, maxrate, bufsize = {
+        "fast": ("veryfast", "8M", "12M", "16M"),
+        "low": ("slow", "5M", "7M", "10M"),
+    }.get(performance_mode, ("medium", "6M", "8M", "12M"))
+    return [
+        "-c:v", "h264_qsv", "-preset", preset,
+        "-b:v", bitrate, "-maxrate", maxrate, "-bufsize", bufsize,
+    ]
 
 
 def get_nvenc_args(performance_mode: str) -> list[str]:
@@ -240,6 +327,8 @@ def render(
 ) -> None:
     global ffmpeg_process
 
+    encoder = resolve_encoder(encoder)
+    video_args = get_video_args(encoder, performance_mode)
     validate_media_tools()
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -267,7 +356,7 @@ def render(
         "0:a:0",
         "-af",
         "highpass=f=80,afftdn,lowpass=f=8000",
-        *get_video_args(encoder, performance_mode),
+        *video_args,
         "-c:a",
         "aac",
         "-b:a",
@@ -276,6 +365,7 @@ def render(
     ]
 
     last_reported = -1
+    error_lines: deque[str] = deque(maxlen=40)
 
     try:
         ffmpeg_process = subprocess.Popen(
@@ -287,6 +377,7 @@ def render(
         assert ffmpeg_process.stderr is not None
 
         for line in ffmpeg_process.stderr:
+            error_lines.append(line.rstrip())
             if total_duration > 0 and on_progress:
                 match = re.search(r"time=(\d+):(\d+):(\d+\.\d+)", line)
 
@@ -302,7 +393,12 @@ def render(
         ffmpeg_process.wait()
 
         if ffmpeg_process.returncode != 0:
-            raise subprocess.CalledProcessError(ffmpeg_process.returncode, cmd)
+            details = "\n".join(error_lines) or "No FFmpeg error output"
+            hint = " Try CPU encoding." if encoder != "cpu" else ""
+            raise RuntimeError(
+                f"FFmpeg rendering failed using {encoder} "
+                f"(exit code {ffmpeg_process.returncode}).{hint}\n{details}"
+            )
 
     finally:
         ffmpeg_process = None

@@ -5,7 +5,12 @@ import {
   type PublishRequirement,
 } from "@/components/PublishRequirements";
 
-import type { Encoder, PerformanceMode, Visibility } from "./../vite-env";
+import type {
+  Encoder,
+  EncoderCapabilities,
+  PerformanceMode,
+  Visibility,
+} from "./../vite-env";
 import type { RenderedVideo, Thumbnail, YouTubeAuth } from "./../types/amp";
 import { DEFAULT_TITLE, DEFAULT_DESCRIPTION } from "./../constants/defaults";
 import { useRenders } from "./../hooks/useRenders";
@@ -134,11 +139,47 @@ export function PublishPage({
     visibility: "private",
   });
 
-  const [encoder, setEncoder] = useState<Encoder>("gpu");
+  const [encoder, setEncoder] = useState<Encoder>("auto");
+  const [encoderCapabilities, setEncoderCapabilities] =
+    useState<EncoderCapabilities | null>(null);
+  const [encoderError, setEncoderError] = useState("");
+  const [checkingEncoders, setCheckingEncoders] = useState(true);
+  const [encoderCheckAttempt, setEncoderCheckAttempt] = useState(0);
   const [performanceMode, setPerformanceMode] =
     useState<PerformanceMode>("balanced");
   const [visibilityStatus, setVisibilityStatus] =
     useState<Visibility>("private");
+
+  useEffect(() => {
+    let active = true;
+    setCheckingEncoders(true);
+    setEncoderCapabilities(null);
+    setEncoderError("");
+    window.electronAPI
+      .getEncoders(performanceMode)
+      .then((result) => {
+        if (!active) return;
+        setEncoderCapabilities(result);
+        setEncoder((current) =>
+          current === "auto" ||
+          result.encoders.some((item) => item.id === current && item.available)
+            ? current
+            : "auto"
+        );
+      })
+      .catch((error: unknown) => {
+        if (active)
+          setEncoderError(
+            error instanceof Error ? error.message : "Encoder detection failed."
+          );
+      })
+      .finally(() => {
+        if (active) setCheckingEncoders(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [performanceMode, encoderCheckAttempt]);
   const [selectedPresetId, setSelectedPresetId] = useState("");
 
   const { renders, loadRenders } = useRenders();
@@ -442,7 +483,17 @@ export function PublishPage({
     ? Boolean(authStatus.token)
     : Boolean(canPublishOrganization && youtubeConnected);
 
-  const canStart = Boolean(thumbnail) && videos.length > 0 && canPublish;
+  const encoderReady =
+    encoder === "auto"
+      ? !checkingEncoders && Boolean(encoderCapabilities?.preferred)
+      : encoderCapabilities
+        ? !checkingEncoders &&
+          encoderCapabilities.encoders.some(
+            (item) => item.id === encoder && item.available
+          )
+        : encoder === "cpu";
+  const canStart =
+    Boolean(thumbnail) && videos.length > 0 && canPublish && encoderReady;
 
   const requirements: PublishRequirement[] = [
     {
@@ -503,7 +554,16 @@ export function PublishPage({
     });
   }
 
-  const encoderLabel = encoder === "gpu" ? "GPU / NVIDIA NVENC" : "CPU / x264";
+  const preferredEncoder = encoderCapabilities?.encoders.find(
+    (item) => item.id === encoderCapabilities.preferred
+  );
+  const encoderLabel =
+    encoder === "auto"
+      ? checkingEncoders
+        ? "Auto — checking encoders…"
+        : `Auto — ${preferredEncoder?.label ?? "unavailable"}`
+      : (encoderCapabilities?.encoders.find((item) => item.id === encoder)
+          ?.label ?? "CPU / x264");
 
   const performanceLabel =
     performanceMode === "fast"
@@ -901,21 +961,63 @@ export function PublishPage({
                     sideOffset={4}
                     className="rounded-md border-border"
                   >
-                    <SelectItem value="gpu">
-                      <div className="flex items-center gap-2">
-                        <Cpu className="size-4 text-muted-foreground" />
-                        GPU / NVIDIA NVENC
-                      </div>
+                    <SelectItem
+                      value="auto"
+                      disabled={checkingEncoders || !preferredEncoder}
+                    >
+                      Auto
+                      {preferredEncoder ? ` — ${preferredEncoder.label}` : ""}
                     </SelectItem>
-
-                    <SelectItem value="cpu">
-                      <div className="flex items-center gap-2">
-                        <Cpu className="size-4 text-muted-foreground" />
-                        CPU / x264
-                      </div>
-                    </SelectItem>
+                    {(
+                      encoderCapabilities?.encoders ?? [
+                        {
+                          id: "cpu",
+                          label: "CPU / x264",
+                          available: true,
+                          reason: null,
+                        },
+                      ]
+                    ).map((item) => (
+                      <SelectItem
+                        key={item.id}
+                        value={item.id}
+                        disabled={!item.available}
+                      >
+                        <div>
+                          <div>
+                            {item.label}
+                            {!item.available ? " — unavailable" : ""}
+                          </div>
+                          {item.reason && (
+                            <div className="text-xs text-muted-foreground">
+                              {item.reason}
+                            </div>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </UiSelect>
+                <p className="text-xs text-muted-foreground" role="status">
+                  {checkingEncoders
+                    ? "Checking encoding support on this computer…"
+                    : encoderError ||
+                      (preferredEncoder
+                        ? encoder === "auto" && preferredEncoder.id === "cpu"
+                          ? "Auto uses CPU because no hardware encoder passed the test."
+                          : "Available encoders passed a short test. If GPU rendering fails, select CPU and retry."
+                        : "No working encoder found. Check your installation.")}
+                </p>
+                {encoderError && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isRunning || checkingEncoders}
+                    onClick={() => setEncoderCheckAttempt((value) => value + 1)}
+                  >
+                    Retry encoder check
+                  </Button>
+                )}
               </div>
 
               {/* Performance */}

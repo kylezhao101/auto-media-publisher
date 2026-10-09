@@ -9,7 +9,7 @@ import signal
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env", override=True)
 
-from render import render
+from render import render, resolve_encoder, detect_encoders
 from youtube import (
     upload_video,
     list_playlists,
@@ -56,6 +56,10 @@ def main():
         logger.info(f"Worker started mode={mode}")
         stage = f"mode:{mode}"
 
+        if mode == "detect-encoders":
+            print(json.dumps(detect_encoders(job.get("performance_mode", "balanced"))), flush=True)
+            return
+
         if mode == "get-channel":
             channel = get_channel()
             print(
@@ -82,12 +86,16 @@ def main():
         playlist_ids = job.get("playlist_ids", [])
 
         if mode == "render-and-upload":
+            encoder = resolve_encoder(encoder)
             if not clip_paths:
                 raise RuntimeError("No clips provided for render-and-upload mode")
 
             emit({"stage": "rendering", "percent": 0})
 
-            logger.info(f"Render started clips={len(clip_paths)} output={output_path}")
+            logger.info(
+                f"Render started encoder={encoder} performance_mode={performance_mode} "
+                f"clips={len(clip_paths)} output={output_path}"
+            )
             stage = "rendering"
             render(
                 clip_paths,

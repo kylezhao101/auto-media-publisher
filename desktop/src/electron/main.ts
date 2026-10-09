@@ -19,6 +19,7 @@ import {
   getLogDir,
 } from "./../helpers/paths.js";
 import { ChildProcess, spawn } from "child_process";
+import type { EncoderCapabilities, PerformanceMode } from "../vite-env.js";
 
 if (process.defaultApp) {
   if (process.argv.length >= 2) {
@@ -242,6 +243,75 @@ function getWorkerEnv() {
     AMP_APP_DATA_DIR: getAppDataDir(),
   };
 }
+
+const encoderChecks = new Map<string, Promise<EncoderCapabilities>>();
+
+function getEncoders(
+  performanceMode: PerformanceMode
+): Promise<EncoderCapabilities> {
+  if (!["fast", "balanced", "low"].includes(performanceMode)) {
+    return Promise.reject(new Error("Invalid performance mode"));
+  }
+  const cached = encoderChecks.get(performanceMode);
+  if (cached) return cached;
+  const check = new Promise<EncoderCapabilities>((resolve, reject) => {
+    preparePackagedBinary(workerBin);
+    const child = spawn(workerBin, workerArgs, {
+      cwd: isDev ? workerDir : packagedWorkerDir,
+      env: {
+        ...getWorkerEnv(),
+        FFMPEG_PATH: isDev ? "ffmpeg" : getPackagedFFmpegPath(),
+      },
+      windowsHide: true,
+    });
+    let output = "";
+    let errors = "";
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(
+        new Error("Encoder detection timed out. You can select CPU encoding.")
+      );
+    }, 60000);
+    child.stdout.on("data", (data: Buffer) => {
+      output += data.toString();
+    });
+    child.stderr.on("data", (data: Buffer) => {
+      errors += data.toString();
+    });
+    child.stdin.on("error", () => {
+      /* Process errors are handled below. */
+    });
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (code !== 0)
+        return reject(new Error(errors || "Encoder detection failed."));
+      try {
+        resolve(JSON.parse(output));
+      } catch {
+        reject(new Error("Invalid encoder detection response."));
+      }
+    });
+    child.stdin.end(
+      JSON.stringify({
+        mode: "detect-encoders",
+        performance_mode: performanceMode,
+      })
+    );
+  });
+  encoderChecks.set(performanceMode, check);
+  check.catch(() => {
+    encoderChecks.delete(performanceMode);
+  });
+  return check;
+}
+
+ipcMain.handle("get-encoders", (_event, performanceMode: PerformanceMode) =>
+  getEncoders(performanceMode)
+);
 
 ipcMain.handle("open-logs-folder", async () => {
   await shell.openPath(getLogDir());
@@ -548,7 +618,18 @@ ipcMain.handle("start-job", async (event, payload) => {
 
     output_path: outputPath,
 
-    encoder,
+    encoder:
+      encoder === "auto" && mode !== "upload-existing"
+        ? await getEncoders(performance_mode ?? "balanced").then((result) => {
+            if (!result.preferred)
+              throw new Error(
+                "No working video encoder found. Check your installation."
+              );
+            return result.preferred;
+          })
+        : encoder === "auto"
+          ? "cpu"
+          : encoder,
 
     performance_mode,
 
@@ -597,7 +678,7 @@ ipcMain.handle("start-job", async (event, payload) => {
     for (const line of data.toString().trim().split("\n")) {
       try {
         event.sender.send("job-progress", JSON.parse(line));
-      } catch { }
+      } catch {}
     }
   });
 
